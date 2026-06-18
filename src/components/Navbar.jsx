@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { Menu, X, ArrowRight } from 'lucide-react';
 
 export default function Navbar() {
@@ -46,10 +47,10 @@ export default function Navbar() {
         </nav>
 
         <div className="nav-actions">
-          <a href="#login" className="btn btn-text">Login</a>
-          <a href="#signup" className="btn btn-primary" style={{ padding: '8px 18px', fontSize: '0.9rem' }}>
+          <Link to="/login" className="btn btn-text">Login</Link>
+          <Link to="/register" className="btn btn-primary" style={{ padding: '8px 18px', fontSize: '0.9rem' }}>
             Get Started <ArrowRight size={14} />
-          </a>
+          </Link>
         </div>
 
         {/* Mobile Hamburger button */}
@@ -72,8 +73,8 @@ export default function Navbar() {
           <li><a href="#faq" onClick={closeMenu}>FAQ</a></li>
         </ul>
         <div className="nav-actions">
-          <a href="#login" className="btn btn-secondary" onClick={closeMenu}>Login</a>
-          <a href="#signup" className="btn btn-primary" onClick={closeMenu}>Get Started</a>
+          <Link to="/login" className="btn btn-secondary" onClick={closeMenu}>Login</Link>
+          <Link to="/register" className="btn btn-primary" onClick={closeMenu}>Get Started</Link>
         </div>
       </div>
     </header>
