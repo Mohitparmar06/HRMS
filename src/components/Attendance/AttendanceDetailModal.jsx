@@ -1,4 +1,4 @@
-import { X, Clock, MapPin, AlertTriangle, CheckCircle, XCircle, MinusCircle, CalendarOff } from 'lucide-react';
+import { X, Clock, Hash, Calendar, AlertTriangle, CheckCircle, XCircle, MinusCircle, CalendarOff, FileText } from 'lucide-react';
 
 const STATUS_CONFIG = {
   present: { label: 'Present', icon: CheckCircle, color: 'var(--success)' },
@@ -36,7 +36,7 @@ export default function AttendanceDetailModal({ record, employee, onClose }) {
             </div>
             <div>
               <h3>{employee.firstName} {employee.lastName}</h3>
-              <p className="modal-subtitle">{employee.position} • {employee.department}</p>
+              <p className="modal-subtitle">{employee.position} &bull; {employee.department}</p>
             </div>
           </div>
           <button className="modal-close" onClick={onClose}><X size={20} /></button>
@@ -52,6 +52,20 @@ export default function AttendanceDetailModal({ record, employee, onClose }) {
           </div>
 
           <div className="detail-grid">
+            <div className="detail-item">
+              <Hash size={18} className="detail-icon" />
+              <div>
+                <span className="detail-label">Employee ID</span>
+                <span className="detail-value">{employee.id}</span>
+              </div>
+            </div>
+            <div className="detail-item">
+              <Calendar size={18} className="detail-icon" />
+              <div>
+                <span className="detail-label">Date</span>
+                <span className="detail-value">{formatDate(record.date)}</span>
+              </div>
+            </div>
             <div className="detail-item">
               <Clock size={18} className="detail-icon" />
               <div>
@@ -69,7 +83,7 @@ export default function AttendanceDetailModal({ record, employee, onClose }) {
             <div className="detail-item">
               <Clock size={18} className="detail-icon" />
               <div>
-                <span className="detail-label">Hours Worked</span>
+                <span className="detail-label">Working Hours</span>
                 <span className="detail-value">{formatHours(record.hoursWorked)}</span>
               </div>
             </div>
@@ -84,7 +98,7 @@ export default function AttendanceDetailModal({ record, employee, onClose }) {
 
           {record.note && (
             <div className="detail-note">
-              <AlertTriangle size={16} />
+              <FileText size={16} />
               <span>{record.note}</span>
             </div>
           )}

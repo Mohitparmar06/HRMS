@@ -1,0 +1,169 @@
+import { createContext, useContext, useState, useCallback, useMemo } from 'react';
+import { leaveRequests as initialLeaveRequests } from '../services/dummyData';
+
+const LeaveContext = createContext(null);
+
+const LEAVE_BALANCE = {
+  'Casual Leave': 12,
+  'Sick Leave': 10,
+  'Earned Leave': 15,
+  'Maternity Leave': 26,
+  'Paternity Leave': 10,
+  'Work From Home': 20,
+};
+
+function toLocalDateStr(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+export function LeaveProvider({ children }) {
+  const [leaveRecords, setLeaveRecords] = useState(() => [...initialLeaveRequests]);
+
+  const addLeaveRequest = useCallback((request) => {
+    setLeaveRecords(prev => {
+      const maxNum = prev.reduce((max, r) => {
+        const num = parseInt(r.id.replace('LR-', ''), 10);
+        return num > max ? num : max;
+      }, 0);
+      const newRecord = {
+        ...request,
+        id: `LR-${String(maxNum + 1).padStart(4, '0')}`,
+        status: 'Pending',
+        appliedDate: toLocalDateStr(new Date()),
+        approvedDate: null,
+        rejectionReason: null,
+      };
+      return [newRecord, ...prev];
+    });
+  }, []);
+
+  const updateLeaveRequest = useCallback((id, updates) => {
+    setLeaveRecords(prev =>
+      prev.map(r => r.id === id ? { ...r, ...updates } : r)
+    );
+  }, []);
+
+  const approveLeave = useCallback((id, approvedBy) => {
+    setLeaveRecords(prev =>
+      prev.map(r => r.id === id ? {
+        ...r,
+        status: 'Approved',
+        approvedDate: toLocalDateStr(new Date()),
+        approvedBy: approvedBy || 'Admin',
+      } : r)
+    );
+  }, []);
+
+  const rejectLeave = useCallback((id, rejectionReason, rejectedBy) => {
+    setLeaveRecords(prev =>
+      prev.map(r => r.id === id ? {
+        ...r,
+        status: 'Rejected',
+        approvedDate: toLocalDateStr(new Date()),
+        rejectionReason: rejectionReason || '',
+        rejectedBy: rejectedBy || 'Admin',
+      } : r)
+    );
+  }, []);
+
+  const cancelLeave = useCallback((id) => {
+    setLeaveRecords(prev =>
+      prev.map(r => r.id === id && r.status === 'Pending' ? {
+        ...r,
+        status: 'Cancelled',
+      } : r)
+    );
+  }, []);
+
+  const deleteLeaveRequest = useCallback((id) => {
+    setLeaveRecords(prev => prev.filter(r => r.id !== id));
+  }, []);
+
+  const getEmployeeLeaves = useCallback((employeeId) => {
+    return leaveRecords.filter(r => r.employeeId === employeeId);
+  }, [leaveRecords]);
+
+  const getLeaveBalance = useCallback((employeeId) => {
+    const empLeaves = leaveRecords.filter(
+      r => r.employeeId === employeeId && (r.status === 'Approved' || r.status === 'Pending')
+    );
+    const balance = {};
+    for (const [type, total] of Object.entries(LEAVE_BALANCE)) {
+      const used = empLeaves
+        .filter(r => r.leaveType === type)
+        .reduce((sum, r) => sum + (r.duration || 0), 0);
+      balance[type] = { total, used, remaining: Math.max(total - used, 0) };
+    }
+    return balance;
+  }, [leaveRecords]);
+
+  const getLeaveStats = useCallback(() => {
+    const today = new Date();
+    const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+    const total = leaveRecords.length;
+    const pending = leaveRecords.filter(r => r.status === 'Pending').length;
+    const approved = leaveRecords.filter(r => r.status === 'Approved').length;
+    const rejected = leaveRecords.filter(r => r.status === 'Rejected').length;
+    const cancelled = leaveRecords.filter(r => r.status === 'Cancelled').length;
+    const totalDays = leaveRecords
+      .filter(r => r.status === 'Approved')
+      .reduce((sum, r) => sum + (r.duration || 0), 0);
+    const approvedToday = leaveRecords.filter(
+      r => r.status === 'Approved' && r.approvedDate === todayStr
+    ).length;
+    const rejectedToday = leaveRecords.filter(
+      r => r.status === 'Rejected' && r.approvedDate === todayStr
+    ).length;
+    const onLeaveToday = leaveRecords.filter(r => {
+      if (r.status !== 'Approved') return false;
+      return r.startDate <= todayStr && r.endDate >= todayStr;
+    }).length;
+    return { total, pending, approved, rejected, cancelled, totalDays, approvedToday, rejectedToday, onLeaveToday };
+  }, [leaveRecords]);
+
+  const getLeaveByType = useCallback(() => {
+    const byType = {};
+    for (const type of Object.keys(LEAVE_BALANCE)) {
+      const typeRecords = leaveRecords.filter(r => r.leaveType === type);
+      byType[type] = {
+        total: typeRecords.length,
+        pending: typeRecords.filter(r => r.status === 'Pending').length,
+        approved: typeRecords.filter(r => r.status === 'Approved').length,
+        rejected: typeRecords.filter(r => r.status === 'Rejected').length,
+      };
+    }
+    return byType;
+  }, [leaveRecords]);
+
+  const contextValue = useMemo(() => ({
+    leaveRecords,
+    leaveBalanceConfig: LEAVE_BALANCE,
+    addLeaveRequest,
+    updateLeaveRequest,
+    approveLeave,
+    rejectLeave,
+    cancelLeave,
+    deleteLeaveRequest,
+    getEmployeeLeaves,
+    getLeaveBalance,
+    getLeaveStats,
+    getLeaveByType,
+  }), [
+    leaveRecords,
+    addLeaveRequest, updateLeaveRequest, approveLeave, rejectLeave,
+    cancelLeave, deleteLeaveRequest, getEmployeeLeaves, getLeaveBalance,
+    getLeaveStats, getLeaveByType,
+  ]);
+
+  return (
+    <LeaveContext.Provider value={contextValue}>
+      {children}
+    </LeaveContext.Provider>
+  );
+}
+
+export function useLeave() {
+  const ctx = useContext(LeaveContext);
+  if (!ctx) throw new Error('useLeave must be used within LeaveProvider');
+  return ctx;
+}

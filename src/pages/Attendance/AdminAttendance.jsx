@@ -2,7 +2,7 @@ import { useState, useMemo, useCallback } from 'react';
 import {
   CheckCircle, XCircle, AlertTriangle, MinusCircle, CalendarOff,
   Search, Filter, Download, BarChart2, Calendar, Users, Clock,
-  ChevronDown, ChevronUp, Eye, Edit3, TrendingUp, TrendingDown,
+  ChevronDown, ChevronUp, Eye, Edit3, Trash2, TrendingUp, TrendingDown,
   ChevronLeft, ChevronRight, FileText
 } from 'lucide-react';
 import { useAttendance } from '../../contexts/AttendanceContext';
@@ -10,6 +10,8 @@ import { employees } from '../../services/dummyData';
 import { useDepartments } from '../../contexts/DepartmentContext';
 import AttendanceCalendar from '../../components/Attendance/AttendanceCalendar';
 import AttendanceDetailModal from '../../components/Attendance/AttendanceDetailModal';
+import AttendanceEditModal from '../../components/Attendance/AttendanceEditModal';
+import AttendanceDeleteDialog from '../../components/Attendance/AttendanceDeleteDialog';
 import AttendanceStatCard from '../../components/Attendance/AttendanceStatCard';
 
 const STATUS_ICONS = {
@@ -30,24 +32,32 @@ const STATUS_COLORS = {
 
 const DEPT_COLORS = ['#3b82f6', '#8b5cf6', '#10b981', '#f59e0b', '#ef4444', '#06b6d4', '#ec4899', '#6366f1'];
 
+function toLocalDateStr(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 export default function AdminAttendance() {
-  const { attendanceRecords, getStats, getWeeklyTrend, getMonthlyAttendanceByDept } = useAttendance();
+  const { attendanceRecords, getStats, getWeeklyTrend, getMonthlyAttendanceByDept, getMonthlySummary } = useAttendance();
   const { departments } = useDepartments();
 
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [deptFilter, setDeptFilter] = useState('all');
-  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  const [selectedDate, setSelectedDate] = useState(() => toLocalDateStr(new Date()));
   const [sortField, setSortField] = useState('date');
   const [sortDir, setSortDir] = useState('desc');
   const [showCalendar, setShowCalendar] = useState(false);
   const [detailRecord, setDetailRecord] = useState(null);
   const [detailEmployee, setDetailEmployee] = useState(null);
+  const [editRecord, setEditRecord] = useState(null);
+  const [editEmployee, setEditEmployee] = useState(null);
+  const [deleteRecord, setDeleteRecord] = useState(null);
+  const [deleteEmployee, setDeleteEmployee] = useState(null);
   const [activeTab, setActiveTab] = useState('overview');
   const [page, setPage] = useState(1);
   const perPage = 12;
 
-  const today = new Date().toISOString().split('T')[0];
+  const today = toLocalDateStr(new Date());
 
   const filteredRecords = useMemo(() => {
     let recs = [...attendanceRecords];
@@ -103,6 +113,7 @@ export default function AdminAttendance() {
 
   const weeklyTrend = useMemo(() => getWeeklyTrend(attendanceRecords), [attendanceRecords]);
   const deptAttendance = useMemo(() => getMonthlyAttendanceByDept(departments), [departments, getMonthlyAttendanceByDept]);
+  const monthlySummary = useMemo(() => getMonthlySummary(), [getMonthlySummary]);
 
   const dateRecords = useMemo(() => {
     return attendanceRecords.filter(r => r.date === selectedDate);
@@ -124,6 +135,18 @@ export default function AdminAttendance() {
     const emp = employees.find(e => e.id === record.employeeId);
     setDetailRecord(record);
     setDetailEmployee(emp);
+  };
+
+  const openEdit = (record) => {
+    const emp = employees.find(e => e.id === record.employeeId);
+    setEditRecord(record);
+    setEditEmployee(emp);
+  };
+
+  const openDelete = (record) => {
+    const emp = employees.find(e => e.id === record.employeeId);
+    setDeleteRecord(record);
+    setDeleteEmployee(emp);
   };
 
   const handleExport = () => {
@@ -182,6 +205,12 @@ export default function AdminAttendance() {
           value={`${overallStats.presentRate}%`}
           icon={TrendingUp}
           color="var(--info)"
+        />
+        <AttendanceStatCard
+          label="Avg Working Hours"
+          value={`${overallStats.avgHours}h`}
+          icon={Clock}
+          color="var(--primary)"
         />
       </div>
 
@@ -266,6 +295,43 @@ export default function AdminAttendance() {
               ))}
             </div>
           </div>
+
+          <div className="att-chart-card att-chart-card-full">
+            <h3 className="att-chart-title">Monthly Attendance Overview</h3>
+            <div className="att-monthly-chart">
+              {monthlySummary.map((m, i) => {
+                const maxPresent = Math.max(...monthlySummary.map(x => x.present), 1);
+                return (
+                  <div key={i} className="att-monthly-col">
+                    <div className="att-monthly-bars">
+                      <div
+                        className="att-monthly-bar present"
+                        style={{ height: `${(m.present / maxPresent) * 100}%` }}
+                        title={`Present: ${m.present}`}
+                      />
+                      <div
+                        className="att-monthly-bar late"
+                        style={{ height: `${(m.late / maxPresent) * 100}%` }}
+                        title={`Late: ${m.late}`}
+                      />
+                      <div
+                        className="att-monthly-bar absent"
+                        style={{ height: `${(m.absent / maxPresent) * 100}%` }}
+                        title={`Absent: ${m.absent}`}
+                      />
+                    </div>
+                    <span className="att-monthly-label">{m.month}</span>
+                    <span className="att-monthly-rate">{m.presentRate}%</span>
+                  </div>
+                );
+              })}
+            </div>
+            <div className="att-bar-legend">
+              <span><span className="legend-dot present" /> Present</span>
+              <span><span className="legend-dot late" /> Late</span>
+              <span><span className="legend-dot absent" /> Absent</span>
+            </div>
+          </div>
         </div>
       )}
 
@@ -337,7 +403,7 @@ export default function AdminAttendance() {
                     <tr key={record.id}>
                       <td>
                         <div className="att-emp-cell">
-                          <div className="att-emp-avatar" style={{ background: DEPT_COLORS[emp.id % DEPT_COLORS.length] }}>
+                          <div className="att-emp-avatar" style={{ background: DEPT_COLORS[parseInt(emp.id.replace('EMP-', ''), 10) % DEPT_COLORS.length] }}>
                             {emp.firstName[0]}{emp.lastName[0]}
                           </div>
                           <div>
@@ -358,9 +424,17 @@ export default function AdminAttendance() {
                       <td><span className="att-time">{record.checkOut || '--'}</span></td>
                       <td><span className="att-hours">{record.hoursWorked > 0 ? `${record.hoursWorked}h` : '--'}</span></td>
                       <td>
-                        <button className="att-action-btn" onClick={() => openDetail(record)}>
-                          <Eye size={16} />
-                        </button>
+                        <div className="att-action-btns">
+                          <button className="att-action-btn" title="View" onClick={() => openDetail(record)}>
+                            <Eye size={16} />
+                          </button>
+                          <button className="att-action-btn edit" title="Edit" onClick={() => openEdit(record)}>
+                            <Edit3 size={16} />
+                          </button>
+                          <button className="att-action-btn delete" title="Delete" onClick={() => openDelete(record)}>
+                            <Trash2 size={16} />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -425,7 +499,7 @@ export default function AdminAttendance() {
                   return (
                     <div key={record.id} className="att-date-record" onClick={() => openDetail(record)}>
                       <div className="att-date-record-left">
-                        <div className="att-emp-avatar small" style={{ background: DEPT_COLORS[emp.id % DEPT_COLORS.length] }}>
+                        <div className="att-emp-avatar small" style={{ background: DEPT_COLORS[parseInt(emp.id.replace('EMP-', ''), 10) % DEPT_COLORS.length] }}>
                           {emp.firstName[0]}{emp.lastName[0]}
                         </div>
                         <div>
@@ -451,6 +525,22 @@ export default function AdminAttendance() {
           record={detailRecord}
           employee={detailEmployee}
           onClose={() => { setDetailRecord(null); setDetailEmployee(null); }}
+        />
+      )}
+
+      {editRecord && (
+        <AttendanceEditModal
+          record={editRecord}
+          employee={editEmployee}
+          onClose={() => { setEditRecord(null); setEditEmployee(null); }}
+        />
+      )}
+
+      {deleteRecord && (
+        <AttendanceDeleteDialog
+          record={deleteRecord}
+          employee={deleteEmployee}
+          onClose={() => { setDeleteRecord(null); setDeleteEmployee(null); }}
         />
       )}
     </div>

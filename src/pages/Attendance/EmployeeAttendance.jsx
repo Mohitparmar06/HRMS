@@ -9,6 +9,10 @@ import AttendanceCalendar from '../../components/Attendance/AttendanceCalendar';
 import CheckInOutCard from '../../components/Attendance/CheckInOutCard';
 import AttendanceDetailModal from '../../components/Attendance/AttendanceDetailModal';
 
+function toLocalDateStr(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 const STATUS_ICONS = {
   present: CheckCircle,
   absent: XCircle,
@@ -51,17 +55,17 @@ export default function EmployeeAttendance() {
   }, [empRecords]);
 
   const weeklyHours = useMemo(() => {
-    const today = new Date();
-    const weekAgo = new Date(today);
+    const now = new Date();
+    const weekAgo = new Date(now);
     weekAgo.setDate(weekAgo.getDate() - 7);
-    const weekStr = weekAgo.toISOString().split('T')[0];
+    const weekStr = toLocalDateStr(weekAgo);
     return empRecords
       .filter(r => r.date >= weekStr)
       .reduce((sum, r) => sum + (r.hoursWorked || 0), 0);
   }, [empRecords]);
 
   const todayRecord = useMemo(() => {
-    const today = new Date().toISOString().split('T')[0];
+    const today = toLocalDateStr(new Date());
     return empRecords.find(r => r.date === today);
   }, [empRecords]);
 

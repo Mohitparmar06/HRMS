@@ -14,6 +14,7 @@ import ForgotPassword from './pages/ForgotPassword';
 import Dashboard from './pages/Dashboard';
 
 import AdminLayout from './layouts/AdminLayout';
+import { AttendanceProvider } from './contexts/AttendanceContext';
 import AdminDashboard from './pages/Admin/AdminDashboard';
 import EmployeeList from './pages/Admin/EmployeeList';
 import AddEmployee from './pages/Admin/AddEmployee';
@@ -25,6 +26,13 @@ import EditDepartment from './pages/Admin/EditDepartment';
 import DepartmentDetails from './pages/Admin/DepartmentDetails';
 import AdminAttendance from './pages/Attendance/AdminAttendance';
 import EmployeeAttendance from './pages/Attendance/EmployeeAttendance';
+import AdminLeave from './pages/Leave/AdminLeave';
+import EmployeeLeave from './pages/Leave/EmployeeLeave';
+import { LeaveProvider } from './contexts/LeaveContext';
+import AdminPayroll from './pages/Payroll/AdminPayroll';
+import EmployeePayroll from './pages/Payroll/EmployeePayroll';
+import { PayrollProvider } from './contexts/PayrollContext';
+import AdminReports from './pages/Reports/AdminReports';
 
 function LandingPage() {
   return (
@@ -61,7 +69,9 @@ export default function App() {
         <Route path="/register" element={<Register />} />
         <Route path="/forgot-password" element={<ForgotPassword />} />
         <Route path="/dashboard" element={<Dashboard />} />
-        <Route path="/attendance" element={<EmployeeAttendance />} />
+        <Route path="/attendance" element={<AttendanceProvider><EmployeeAttendance /></AttendanceProvider>} />
+        <Route path="/leave" element={<LeaveProvider><EmployeeLeave /></LeaveProvider>} />
+        <Route path="/payroll" element={<PayrollProvider><EmployeePayroll /></PayrollProvider>} />
 
         <Route path="/admin" element={<AdminLayout />}>
           <Route index element={<AdminDashboard />} />
@@ -74,9 +84,9 @@ export default function App() {
           <Route path="departments/:id" element={<DepartmentDetails />} />
           <Route path="departments/:id/edit" element={<EditDepartment />} />
           <Route path="attendance" element={<AdminAttendance />} />
-          <Route path="leave" element={<AdminPlaceholder title="Leave Management" />} />
-          <Route path="payroll" element={<AdminPlaceholder title="Payroll Processing" />} />
-          <Route path="reports" element={<AdminPlaceholder title="Reports & Analytics" />} />
+          <Route path="leave" element={<AdminLeave />} />
+          <Route path="payroll" element={<AdminPayroll />} />
+          <Route path="reports" element={<AdminReports />} />
           <Route path="notifications" element={<AdminPlaceholder title="Notifications Center" />} />
           <Route path="settings" element={<AdminPlaceholder title="System Settings" />} />
         </Route>

@@ -1,95 +1,11 @@
-import { employees } from './dummyData';
-
-const STATUSES = ['present', 'absent', 'late', 'half-day', 'on-leave'];
-const STATUS_WEIGHTS = [0.7, 0.1, 0.08, 0.05, 0.07];
-const CHECK_IN_TIMES = {
-  present: ['09:00', '09:01', '08:58', '09:05', '08:55'],
-  late: ['09:15', '09:20', '09:25', '09:30', '09:45'],
-  'half-day': ['09:00', '09:05', '09:10'],
-  'on-leave': [],
-  absent: [],
-};
-const CHECK_OUT_TIMES = {
-  present: ['17:30', '17:35', '17:45', '18:00', '17:55'],
-  late: ['17:30', '18:00', '18:15', '18:30'],
-  'half-day': ['13:00', '13:15', '13:30'],
-  'on-leave': [],
-  absent: [],
-};
-
-function seededRandom(seed) {
-  let s = seed;
-  return () => {
-    s = (s * 16807) % 2147483647;
-    return (s - 1) / 2147483646;
-  };
-}
-
-function pickRandom(arr, rand) {
-  return arr[Math.floor(rand() * arr.length)];
-}
-
-function weightedPick(items, weights, rand) {
-  const r = rand();
-  let cumulative = 0;
-  for (let i = 0; i < items.length; i++) {
-    cumulative += weights[i];
-    if (r < cumulative) return items[i];
-  }
-  return items[items.length - 1];
-}
-
-function generateAttendanceForEmployee(emp, rand) {
-  const records = [];
-  const today = new Date(2026, 5, 19);
-
-  for (let dayOffset = 29; dayOffset >= 0; dayOffset--) {
-    const date = new Date(today);
-    date.setDate(date.getDate() - dayOffset);
-
-    if (date.getDay() === 0 || date.getDay() === 6) continue;
-
-    const dateStr = date.toISOString().split('T')[0];
-    const status = weightedPick(STATUSES, STATUS_WEIGHTS, rand);
-    const checkIn = pickRandom(CHECK_IN_TIMES[status], rand);
-    const checkOut = status !== 'absent' ? pickRandom(CHECK_OUT_TIMES[status], rand) : null;
-    let hoursWorked = 0;
-    if (checkIn && checkOut) {
-      const [inH, inM] = checkIn.split(':').map(Number);
-      const [outH, outM] = checkOut.split(':').map(Number);
-      hoursWorked = (outH + outM / 60) - (inH + inM / 60);
-      if (hoursWorked < 0) hoursWorked += 24;
-    }
-
-    records.push({
-      id: `${emp.id}-${dateStr}`,
-      employeeId: emp.id,
-      date: dateStr,
-      status,
-      checkIn,
-      checkOut,
-      hoursWorked: Math.round(hoursWorked * 100) / 100,
-      overtime: hoursWorked > 8 ? Math.round((hoursWorked - 8) * 100) / 100 : 0,
-      note: status === 'on-leave' ? 'Annual Leave' : status === 'late' ? 'Traffic delay' : '',
-    });
-  }
-
-  return records;
-}
+import { generateAllAttendance, generateMonthlySummary, employees, departments } from './attendanceData';
 
 let cachedRecords = null;
+let cachedMonthly = null;
 
 export function getAllAttendance() {
   if (cachedRecords) return cachedRecords;
-
-  const rand = seededRandom(42);
-  cachedRecords = [];
-
-  for (const emp of employees) {
-    const empRand = seededRandom(emp.id);
-    cachedRecords = cachedRecords.concat(generateAttendanceForEmployee(emp, empRand));
-  }
-
+  cachedRecords = generateAllAttendance();
   return cachedRecords;
 }
 
@@ -132,10 +48,9 @@ export function getAttendanceStats(records) {
 }
 
 export function getWeeklyTrend(records) {
-  const days = [];
   const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-
   const grouped = {};
+
   for (const r of records) {
     if (!grouped[r.date]) grouped[r.date] = [];
     grouped[r.date].push(r);
@@ -143,29 +58,27 @@ export function getWeeklyTrend(records) {
 
   const sortedDates = Object.keys(grouped).sort().slice(-7);
 
-  for (const dateStr of sortedDates) {
-    const date = new Date(dateStr);
+  return sortedDates.map(dateStr => {
+    const parts = dateStr.split('-').map(Number);
+    const date = new Date(parts[0], parts[1] - 1, parts[2]);
     const dayRecords = grouped[dateStr];
     const stats = getAttendanceStats(dayRecords);
 
-    days.push({
+    return {
       day: dayNames[date.getDay()],
       date: dateStr,
       present: stats.present + stats.late,
       absent: stats.absent,
       late: stats.late,
-    });
-  }
-
-  return days;
+    };
+  });
 }
 
 export function getMonthlyAttendanceByDept(records, allDepartments) {
   const result = {};
 
   for (const dept of allDepartments) {
-    const deptEmployees = employees.filter(e => e.department === dept.name);
-    const deptEmpIds = deptEmployees.map(e => e.id);
+    const deptEmpIds = employees.filter(e => e.department === dept.name).map(e => e.id);
     const deptRecords = records.filter(r => deptEmpIds.includes(r.employeeId));
     const stats = getAttendanceStats(deptRecords);
 
@@ -182,6 +95,12 @@ export function getMonthlyAttendanceByDept(records, allDepartments) {
   return result;
 }
 
+export function getMonthlySummary() {
+  if (cachedMonthly) return cachedMonthly;
+  cachedMonthly = generateMonthlySummary();
+  return cachedMonthly;
+}
+
 export function getOvertimeSummary(records) {
   const byEmployee = {};
 
@@ -195,9 +114,9 @@ export function getOvertimeSummary(records) {
 
   return Object.entries(byEmployee)
     .map(([empId, data]) => {
-      const emp = employees.find(e => e.id === parseInt(empId));
+      const emp = employees.find(e => e.id === empId);
       return {
-        employeeId: parseInt(empId),
+        employeeId: empId,
         name: emp ? `${emp.firstName} ${emp.lastName}` : `Employee ${empId}`,
         department: emp ? emp.department : '',
         totalOvertime: Math.round(data.total * 100) / 100,

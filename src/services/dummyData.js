@@ -74,7 +74,7 @@ const lastNames = [
 ];
 
 const statuses = ['Active', 'On Leave', 'Inactive'];
-const leaveTypes = ['Annual Leave', 'Sick Leave', 'Personal Leave', 'Maternity Leave', 'Paternity Leave', 'Unpaid Leave'];
+const leaveTypes = ['Casual Leave', 'Sick Leave', 'Earned Leave', 'Maternity Leave', 'Paternity Leave', 'Work From Home'];
 
 function seededRandom(seed) {
   let s = seed;
@@ -176,7 +176,6 @@ function generateAttendance() {
 function generateLeaveRequests() {
   const rand = seededRandom(200);
   const requests = [];
-  const statuses = ['Pending', 'Approved', 'Rejected'];
   const reasons = [
     'Family vacation planned months in advance',
     'Medical appointment and recovery',
@@ -190,15 +189,47 @@ function generateLeaveRequests() {
     'Child school event',
     'Religious observance',
     'Traveling abroad',
+    'Doctor recommended rest',
+    'Elderly parent care',
+    'Household maintenance required',
   ];
+  const rejectionReasons = [
+    'Insufficient staffing during project deadline',
+    'Overlap with approved leave for another team member',
+    'Peak business period - reschedule requested',
+    'Pending performance review meeting',
+    'Required for client presentation',
+  ];
+  const months = ['2026-01', '2026-02', '2026-03', '2026-04', '2026-05', '2026-06'];
 
-  for (let i = 1; i <= 20; i++) {
+  for (let i = 1; i <= 50; i++) {
     const empIdx = Math.floor(rand() * 150);
     const emp = allEmployees[empIdx];
     const leaveType = leaveTypes[Math.floor(rand() * leaveTypes.length)];
-    const status = statuses[Math.floor(rand() * statuses.length)];
-    const startDay = Math.floor(rand() * 28) + 1;
+    let status;
+    if (i <= 28) {
+      status = 'Pending';
+    } else if (i <= 42) {
+      status = 'Approved';
+    } else {
+      status = 'Rejected';
+    }
+    const month = months[Math.floor(rand() * months.length)];
+    const startDay = Math.floor(rand() * 25) + 1;
     const duration = 1 + Math.floor(rand() * 5);
+    const endDay = Math.min(startDay + duration, 28);
+
+    const appliedDay = Math.max(startDay - Math.floor(rand() * 5) - 1, 1);
+    const appliedDate = `${month}-${String(appliedDay).padStart(2, '0')}`;
+
+    let approvedDate = null;
+    let rejectionReason = null;
+    if (status === 'Approved') {
+      approvedDate = `${month}-${String(Math.min(appliedDay + 1 + Math.floor(rand() * 2), 28)).padStart(2, '0')}`;
+    } else if (status === 'Rejected') {
+      approvedDate = `${month}-${String(Math.min(appliedDay + 1 + Math.floor(rand() * 2), 28)).padStart(2, '0')}`;
+      rejectionReason = rejectionReasons[Math.floor(rand() * rejectionReasons.length)];
+    }
 
     requests.push({
       id: `LR-${String(i).padStart(4, '0')}`,
@@ -207,11 +238,14 @@ function generateLeaveRequests() {
       employeeAvatar: emp.avatar,
       department: emp.department,
       leaveType,
-      startDate: `2026-06-${String(startDay).padStart(2, '0')}`,
-      endDate: `2026-06-${String(Math.min(startDay + duration, 30)).padStart(2, '0')}`,
+      startDate: `${month}-${String(startDay).padStart(2, '0')}`,
+      endDate: `${month}-${String(endDay).padStart(2, '0')}`,
+      duration: endDay - startDay + 1,
       reason: reasons[Math.floor(rand() * reasons.length)],
       status,
-      appliedDate: `2026-06-${String(Math.max(startDay - 3, 1)).padStart(2, '0')}`,
+      appliedDate,
+      approvedDate,
+      rejectionReason,
     });
   }
 
@@ -245,6 +279,103 @@ function generatePayrollData() {
   return payroll;
 }
 
+function generateEmployeePayrollRecords() {
+  const rand = seededRandom(700);
+  const records = [];
+  const periods = [
+    { label: 'January 2026', key: '2026-01' },
+    { label: 'February 2026', key: '2026-02' },
+    { label: 'March 2026', key: '2026-03' },
+    { label: 'April 2026', key: '2026-04' },
+    { label: 'May 2026', key: '2026-05' },
+    { label: 'June 2026', key: '2026-06' },
+  ];
+
+  let recId = 1;
+
+  allEmployees.forEach(emp => {
+    if (emp.status === 'Inactive') return;
+
+    periods.forEach((period, pIdx) => {
+      const baseSalary = emp.salary;
+      const hra = Math.round(baseSalary * (0.20 + rand() * 0.10));
+      const transport = Math.round(800 + rand() * 1200);
+      const medical = Math.round(500 + rand() * 1000);
+      const specialAllowance = Math.round(baseSalary * (0.05 + rand() * 0.08));
+      const allowances = hra + transport + medical + specialAllowance;
+
+      const bonus = rand() > 0.6 ? Math.round(baseSalary * (0.02 + rand() * 0.08)) : 0;
+      const overtimePay = rand() > 0.7 ? Math.round(baseSalary * (0.01 + rand() * 0.05)) : 0;
+
+      const pf = Math.round(baseSalary * 0.12);
+      const professionalTax = 200;
+      const incomeTax = Math.round(baseSalary * (0.10 + rand() * 0.10));
+      const insurance = Math.round(500 + rand() * 800);
+      const otherDeductions = rand() > 0.8 ? Math.round(200 + rand() * 500) : 0;
+      const totalDeductions = pf + professionalTax + incomeTax + insurance + otherDeductions;
+
+      const grossSalary = baseSalary + allowances + bonus + overtimePay;
+      const netSalary = grossSalary - totalDeductions;
+
+      let status;
+      if (pIdx < 4) {
+        status = 'Paid';
+      } else if (pIdx === 4) {
+        status = rand() > 0.3 ? 'Paid' : 'Pending';
+      } else {
+        status = 'Pending';
+      }
+
+      const paymentDate = status === 'Paid'
+        ? `${period.key}-${String(25 + Math.floor(rand() * 3)).padStart(2, '0')}`
+        : null;
+
+      records.push({
+        id: `PR-${String(recId).padStart(5, '0')}`,
+        employeeId: emp.id,
+        employeeName: emp.name,
+        employeeAvatar: emp.avatar,
+        department: emp.department,
+        position: emp.position,
+        period: period.label,
+        periodKey: period.key,
+        baseSalary,
+        allowances,
+        hra,
+        transport,
+        medical,
+        specialAllowance,
+        bonus,
+        overtimePay,
+        grossSalary,
+        pf,
+        professionalTax,
+        incomeTax,
+        insurance,
+        otherDeductions,
+        totalDeductions,
+        netSalary,
+        status,
+        paymentDate,
+      });
+      recId++;
+    });
+  });
+
+  return records;
+}
+
+function generatePayPeriods() {
+  return [
+    { key: '2026-01', label: 'January 2026', status: 'Closed', processedDate: '2026-01-25', employeeCount: 142 },
+    { key: '2026-02', label: 'February 2026', status: 'Closed', processedDate: '2026-02-25', employeeCount: 143 },
+    { key: '2026-03', label: 'March 2026', status: 'Closed', processedDate: '2026-03-25', employeeCount: 144 },
+    { key: '2026-04', label: 'April 2026', status: 'Closed', processedDate: '2026-04-25', employeeCount: 145 },
+    { key: '2026-05', label: 'May 2026', status: 'Processing', processedDate: '2026-05-25', employeeCount: 146 },
+    { key: '2026-06', label: 'June 2026', status: 'Open', processedDate: null, employeeCount: 148 },
+  ];
+}
+
 function generateWeeklyAttendance() {
   const rand = seededRandom(500);
   const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
@@ -272,6 +403,8 @@ const allEmployees = generateEmployees();
 const attendanceData = generateAttendance();
 const leaveRequests = generateLeaveRequests();
 const payrollData = generatePayrollData();
+const employeePayrollRecords = generateEmployeePayrollRecords();
+const payPeriods = generatePayPeriods();
 const weeklyAttendance = generateWeeklyAttendance();
 const employeeGrowth = generateEmployeeGrowth();
 
@@ -281,6 +414,8 @@ export {
   attendanceData,
   leaveRequests,
   payrollData,
+  employeePayrollRecords,
+  payPeriods,
   weeklyAttendance,
   employeeGrowth,
 };

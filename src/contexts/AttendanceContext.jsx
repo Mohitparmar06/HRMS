@@ -6,11 +6,16 @@ import {
   getAttendanceStats,
   getWeeklyTrend,
   getMonthlyAttendanceByDept,
+  getMonthlySummary,
   getOvertimeSummary,
 } from '../services/attendanceService';
 import { employees } from '../services/dummyData';
 
 const AttendanceContext = createContext(null);
+
+function toLocalDateStr(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
 
 export function AttendanceProvider({ children }) {
   const [attendanceRecords, setAttendanceRecords] = useState(() => getAllAttendance());
@@ -70,10 +75,14 @@ export function AttendanceProvider({ children }) {
     });
   }, []);
 
+  const deleteRecord = useCallback((employeeId, dateStr) => {
+    setAttendanceRecords(prev => prev.filter(r => !(r.employeeId === employeeId && r.date === dateStr)));
+  }, []);
+
   const checkIn = useCallback((employeeId) => {
     const now = new Date();
     const time = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-    const today = now.toISOString().split('T')[0];
+    const today = toLocalDateStr(now);
 
     setTodayCheckIn(time);
     setTodayCheckOut(null);
@@ -84,7 +93,7 @@ export function AttendanceProvider({ children }) {
     if (!todayCheckIn) return;
     const now = new Date();
     const time = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-    const today = now.toISOString().split('T')[0];
+    const today = toLocalDateStr(now);
 
     setTodayCheckOut(time);
     const hours = calculateHours(todayCheckIn, time);
@@ -100,17 +109,19 @@ export function AttendanceProvider({ children }) {
     getDateRecords,
     getRecord,
     updateRecord,
+    deleteRecord,
     markAttendance,
     checkIn,
     checkOut,
     getStats: getAttendanceStats,
     getWeeklyTrend,
     getMonthlyAttendanceByDept: (depts) => getMonthlyAttendanceByDept(attendanceRecords, depts),
+    getMonthlySummary,
     getOvertimeSummary: () => getOvertimeSummary(attendanceRecords),
   }), [
     attendanceRecords, todayCheckIn, todayCheckOut,
     getEmployeeRecords, getDateRecords, getRecord,
-    updateRecord, markAttendance, checkIn, checkOut,
+    updateRecord, deleteRecord, markAttendance, checkIn, checkOut,
   ]);
 
   return (
