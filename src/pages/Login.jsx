@@ -12,7 +12,14 @@ export default function Login() {
   // Validation States
   const [emailError, setEmailError] = useState('');
   const [passwordError, setPasswordError] = useState('');
+  const [loginError, setLoginError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+
+  // Demo credentials
+  const DEMO_USERS = {
+    'employee@dayflow.com': { password: '12345678', redirect: '/dashboard', role: 'Employee' },
+    'admin@dayflow.com': { password: 'admin123', redirect: '/admin', role: 'Admin' },
+  };
 
   const togglePasswordVisibility = () => {
     setShowPassword(!showPassword);
@@ -45,13 +52,18 @@ export default function Login() {
 
   const handleSubmit = (e) => {
     e.preventDefault();
+    setLoginError('');
     
     if (validateForm()) {
       setIsLoading(true);
-      // Simulate API loading state before redirecting
       setTimeout(() => {
         setIsLoading(false);
-        navigate('/dashboard');
+        const user = DEMO_USERS[email.toLowerCase().trim()];
+        if (user && user.password === password) {
+          navigate(user.redirect);
+        } else {
+          setLoginError('Invalid email or password');
+        }
       }, 1500);
     }
   };
@@ -133,6 +145,7 @@ export default function Login() {
                     onChange={(e) => {
                       setEmail(e.target.value);
                       if (emailError) setEmailError('');
+                      if (loginError) setLoginError('');
                     }}
                     disabled={isLoading}
                   />
@@ -157,6 +170,7 @@ export default function Login() {
                     onChange={(e) => {
                       setPassword(e.target.value);
                       if (passwordError) setPasswordError('');
+                      if (loginError) setLoginError('');
                     }}
                     disabled={isLoading}
                   />
@@ -192,6 +206,14 @@ export default function Login() {
                   Forgot Password?
                 </Link>
               </div>
+
+              {/* Login Error */}
+              {loginError && (
+                <div className="login-error-banner">
+                  <AlertCircle size={16} />
+                  <span>{loginError}</span>
+                </div>
+              )}
 
               {/* Login Action Button */}
               <button
