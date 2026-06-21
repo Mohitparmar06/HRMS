@@ -1,5 +1,4 @@
-import React from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import Navbar from './components/Navbar';
 import Hero from './components/Hero';
 import Features from './components/Features';
@@ -33,6 +32,8 @@ import AdminPayroll from './pages/Payroll/AdminPayroll';
 import EmployeePayroll from './pages/Payroll/EmployeePayroll';
 import { PayrollProvider } from './contexts/PayrollContext';
 import AdminReports from './pages/Reports/AdminReports';
+import AdminNotifications from './pages/Notifications/AdminNotifications';
+import AdminSettings from './pages/Settings/AdminSettings';
 
 function LandingPage() {
   return (
@@ -47,16 +48,6 @@ function LandingPage() {
       </main>
       <Footer />
     </>
-  );
-}
-
-function AdminPlaceholder({ title }) {
-  return (
-    <div className="admin-placeholder">
-      <h2>{title}</h2>
-      <p>This section is coming soon. The full implementation will be available in the next release.</p>
-      <button className="btn btn-primary" onClick={() => window.history.back()}>Go Back</button>
-    </div>
   );
 }
 
@@ -87,8 +78,8 @@ export default function App() {
           <Route path="leave" element={<AdminLeave />} />
           <Route path="payroll" element={<AdminPayroll />} />
           <Route path="reports" element={<AdminReports />} />
-          <Route path="notifications" element={<AdminPlaceholder title="Notifications Center" />} />
-          <Route path="settings" element={<AdminPlaceholder title="System Settings" />} />
+          <Route path="notifications" element={<AdminNotifications />} />
+          <Route path="settings" element={<AdminSettings />} />
         </Route>
       </Routes>
     </Router>

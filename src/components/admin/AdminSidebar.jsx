@@ -1,10 +1,10 @@
-import React from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard, Users, Building2, Clock, CalendarDays, Wallet,
   BarChart3, Bell, Settings, LogOut, ChevronLeft, ChevronRight,
   Shield
 } from 'lucide-react';
+import { useSettings } from '../../contexts/SettingsContext';
 
 const menuItems = [
   { name: 'Dashboard', icon: LayoutDashboard, path: '/admin', exact: true },
@@ -21,7 +21,9 @@ const menuItems = [
 export default function AdminSidebar({ collapsed, onToggle }) {
   const navigate = useNavigate();
   const location = useLocation();
+  const { settings } = useSettings();
   const currentPath = location.pathname;
+  const companyName = settings.company.name.split(' ')[0] || 'Dayflow';
 
   const isActive = (item) => {
     if (item.exact) return currentPath === item.path;
@@ -33,8 +35,12 @@ export default function AdminSidebar({ collapsed, onToggle }) {
       <div className="admin-sidebar-inner">
         <div className="admin-sidebar-top">
           <div className="admin-sidebar-logo" onClick={() => navigate('/admin')}>
-            <div className="logo-dot"></div>
-            {!collapsed && <span>Dayflow</span>}
+            {settings.company.logo ? (
+              <img src={settings.company.logo} alt="Logo" className="sidebar-logo-img" />
+            ) : (
+              <div className="logo-dot"></div>
+            )}
+            {!collapsed && <span>{companyName}</span>}
           </div>
           <button className="admin-sidebar-toggle" onClick={onToggle} aria-label="Toggle sidebar">
             {collapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}

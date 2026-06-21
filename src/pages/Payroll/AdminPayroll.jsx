@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { usePayroll } from '../../contexts/PayrollContext';
 import { useDepartments } from '../../contexts/DepartmentContext';
+import { useSettings } from '../../contexts/SettingsContext';
 import PayrollDetailsModal from '../../components/Payroll/PayrollDetailsModal';
 import PayslipModal from '../../components/Payroll/PayslipModal';
 
@@ -14,11 +15,6 @@ const STATUS_CONFIG = {
   Paid: { color: 'var(--success)', icon: CheckCircle, bg: 'rgba(16, 185, 129, 0.1)' },
   Pending: { color: 'var(--warning)', icon: Clock, bg: 'rgba(245, 158, 11, 0.1)' },
 };
-
-function formatCurrency(val) {
-  if (val == null) return '--';
-  return '$' + val.toLocaleString('en-US');
-}
 
 function formatDate(dateStr) {
   if (!dateStr) return '--';
@@ -50,6 +46,7 @@ function computeSalary(form) {
 export default function AdminPayroll() {
   const { records, periods, updateRecord, markAsPaid, markMultipleAsPaid, generatePayroll, generatePayrollForPeriod, getPayrollStats } = usePayroll();
   const { departments } = useDepartments();
+  const { formatCurrency } = useSettings();
 
   const [search, setSearch] = useState('');
   const [deptFilter, setDeptFilter] = useState('all');

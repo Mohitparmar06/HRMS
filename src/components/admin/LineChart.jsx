@@ -1,6 +1,7 @@
-import React from 'react';
+import { useState } from 'react';
 
 export default function LineChart({ datasets, labels, height = 200 }) {
+  const [tooltip, setTooltip] = useState(null);
   const allValues = datasets.flatMap(d => d.data);
   const max = Math.max(...allValues);
   const min = Math.min(...allValues);
@@ -50,11 +51,40 @@ export default function LineChart({ datasets, labels, height = 200 }) {
               <polygon points={areaPoints} fill={`url(#line-grad-${dsi})`} />
               <polyline points={points} fill="none" stroke={ds.color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
               {ds.data.map((val, i) => (
-                <circle key={i} cx={getX(i)} cy={getY(val)} r="3" fill={ds.color} stroke="var(--bg-dark)" strokeWidth="1.5" />
+                <g key={i}>
+                  <circle
+                    cx={getX(i)}
+                    cy={getY(val)}
+                    r="8"
+                    fill="transparent"
+                    onMouseEnter={() => setTooltip({ x: getX(i), y: getY(val), value: val, label: labels[i] })}
+                    onMouseLeave={() => setTooltip(null)}
+                    style={{ cursor: 'pointer' }}
+                  />
+                  <circle
+                    cx={getX(i)}
+                    cy={getY(val)}
+                    r="3.5"
+                    fill={ds.color}
+                    stroke="var(--bg-dark)"
+                    strokeWidth="1.5"
+                    style={{ pointerEvents: 'none' }}
+                  />
+                </g>
               ))}
             </g>
           );
         })}
+
+        {tooltip && (
+          <g>
+            <line x1={tooltip.x} y1={padding.top} x2={tooltip.x} y2={padding.top + chartH} stroke="rgba(255,255,255,0.15)" strokeDasharray="3 3" />
+            <rect x={tooltip.x - 36} y={tooltip.y - 28} width="72" height="22" rx="6" fill="rgba(0,0,0,0.85)" stroke="rgba(255,255,255,0.1)" />
+            <text x={tooltip.x} y={tooltip.y - 13} textAnchor="middle" fill="white" fontSize="10" fontWeight="600">
+              {tooltip.value}
+            </text>
+          </g>
+        )}
       </svg>
     </div>
   );

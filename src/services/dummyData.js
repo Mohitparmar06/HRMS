@@ -377,15 +377,13 @@ function generatePayPeriods() {
 }
 
 function generateWeeklyAttendance() {
-  const rand = seededRandom(500);
-  const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
-  return days.map(day => ({
-    day,
-    present: 115 + Math.floor(rand() * 25),
-    absent: 8 + Math.floor(rand() * 15),
-    late: 5 + Math.floor(rand() * 12),
-    workHours: (7.5 + rand() * 2).toFixed(1),
-  }));
+  return [
+    { day: 'Monday',    present: 118, absent: 9,  late: 6,  halfDay: 3 },
+    { day: 'Tuesday',   present: 124, absent: 7,  late: 5,  halfDay: 2 },
+    { day: 'Wednesday', present: 121, absent: 10, late: 8,  halfDay: 4 },
+    { day: 'Thursday',  present: 127, absent: 6,  late: 4,  halfDay: 3 },
+    { day: 'Friday',    present: 119, absent: 8,  late: 7,  halfDay: 2 },
+  ];
 }
 
 function generateEmployeeGrowth() {
