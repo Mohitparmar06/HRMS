@@ -101,7 +101,7 @@ export default function AdminDashboard() {
       <div className="admin-dashboard-header">
         <div>
           <h1 className="admin-dashboard-title">Admin Dashboard</h1>
-          <p className="admin-dashboard-subtitle">Welcome back, Alex. Here's your organization overview.</p>
+          <p className="admin-dashboard-subtitle">Welcome back, Admin. Here's your organization overview.</p>
         </div>
         <div className="admin-dashboard-header-actions">
           <button className="btn btn-secondary" style={{ padding: '10px 16px', fontSize: '0.85rem' }} onClick={handleExportCSV}>

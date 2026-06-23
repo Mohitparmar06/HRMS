@@ -90,7 +90,7 @@ export default function AdminNotifications() {
   const readCount = notifications.length - unreadCount;
 
   const filtered = useMemo(() => {
-    let result = [...notifications];
+    let result = notifications.filter(n => n.targetEmployeeId === null || n.targetEmployeeId === undefined);
 
     if (activeTab === 'unread') result = result.filter(n => !n.read);
     else if (activeTab === 'read') result = result.filter(n => n.read);

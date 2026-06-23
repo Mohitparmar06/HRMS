@@ -22,51 +22,11 @@ const QUICK_ADD_OPTIONS = [
 const DUMMY_MESSAGES = [
   {
     id: 1,
-    sender: 'Sarah Chen',
-    avatar: 'SC',
-    preview: 'Please review the new policy document when you get a chance.',
-    time: '2 min ago',
+    sender: 'System',
+    avatar: 'SY',
+    preview: 'Welcome to Dayflow HRMS admin panel.',
+    time: '1 min ago',
     unread: true,
-  },
-  {
-    id: 2,
-    sender: 'Michael Torres',
-    avatar: 'MT',
-    preview: 'The onboarding checklist for the new hire is ready.',
-    time: '15 min ago',
-    unread: true,
-  },
-  {
-    id: 3,
-    sender: 'Emily Watson',
-    avatar: 'EW',
-    preview: 'Can we schedule a meeting to discuss the Q2 targets?',
-    time: '1 hr ago',
-    unread: false,
-  },
-  {
-    id: 4,
-    sender: 'David Kim',
-    avatar: 'DK',
-    preview: 'Payroll processing for this month is complete.',
-    time: '3 hr ago',
-    unread: false,
-  },
-  {
-    id: 5,
-    sender: 'Rachel Adams',
-    avatar: 'RA',
-    preview: 'The attendance report for May has been uploaded.',
-    time: '5 hr ago',
-    unread: false,
-  },
-  {
-    id: 6,
-    sender: 'James Lee',
-    avatar: 'JL',
-    preview: 'Department budget proposal is attached for review.',
-    time: '1 day ago',
-    unread: false,
   },
 ];
 
@@ -94,7 +54,9 @@ export default function AdminNavbar({ onMobileToggle, isMobileOpen }) {
   const navigate = useNavigate();
 
   const { notifications, unreadCount, markAllAsRead } = useNotifications();
-  const latestFive = notifications.slice(0, 5);
+  const adminNotifications = notifications.filter(n => n.targetEmployeeId === null || n.targetEmployeeId === undefined);
+  const latestFive = adminNotifications.slice(0, 5);
+  const adminUnreadCount = adminNotifications.filter(n => !n.read).length;
   const unreadMessageCount = messages.filter(m => m.unread).length;
 
   const handleMarkAllRead = () => {
@@ -255,7 +217,7 @@ export default function AdminNavbar({ onMobileToggle, isMobileOpen }) {
             }}
           >
             <Bell size={18} />
-            {unreadCount > 0 && <span className="admin-topbar-badge">{unreadCount}</span>}
+            {adminUnreadCount > 0 && <span className="admin-topbar-badge">{adminUnreadCount}</span>}
           </button>
 
           {showNotifications && (
@@ -312,7 +274,7 @@ export default function AdminNavbar({ onMobileToggle, isMobileOpen }) {
         <div className="admin-topbar-profile">
           <div className="admin-topbar-avatar">AD</div>
           <div className="admin-topbar-profile-info">
-            <span className="admin-topbar-name">Alex Morgan</span>
+            <span className="admin-topbar-name">Admin</span>
             <span className="admin-topbar-role">HR Admin</span>
           </div>
         </div>

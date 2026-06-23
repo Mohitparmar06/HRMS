@@ -17,7 +17,7 @@ function toLocalDateStr(d) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
-export function AttendanceProvider({ children }) {
+export function AttendanceProvider({ children, onCheckIn, onCheckOut }) {
   const [attendanceRecords, setAttendanceRecords] = useState(() => getAllAttendance());
   const [todayCheckIn, setTodayCheckIn] = useState(null);
   const [todayCheckOut, setTodayCheckOut] = useState(null);
@@ -87,7 +87,16 @@ export function AttendanceProvider({ children }) {
     setTodayCheckIn(time);
     setTodayCheckOut(null);
     markAttendance(employeeId, today, 'present', time, null, '');
-  }, [markAttendance]);
+
+    if (onCheckIn) {
+      const emp = employees.find(e => e.id === employeeId);
+      onCheckIn({
+        employeeName: emp ? `${emp.firstName} ${emp.lastName}` : employeeId,
+        employeeId,
+        time,
+      });
+    }
+  }, [markAttendance, onCheckIn]);
 
   const checkOut = useCallback((employeeId) => {
     if (!todayCheckIn) return;
@@ -99,7 +108,17 @@ export function AttendanceProvider({ children }) {
     const hours = calculateHours(todayCheckIn, time);
     const status = hours < 4 ? 'half-day' : 'present';
     markAttendance(employeeId, today, status, todayCheckIn, time, '');
-  }, [todayCheckIn, markAttendance]);
+
+    if (onCheckOut) {
+      const emp = employees.find(e => e.id === employeeId);
+      onCheckOut({
+        employeeName: emp ? `${emp.firstName} ${emp.lastName}` : employeeId,
+        employeeId,
+        time,
+        hours,
+      });
+    }
+  }, [todayCheckIn, markAttendance, onCheckOut]);
 
   const contextValue = useMemo(() => ({
     attendanceRecords,

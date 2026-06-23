@@ -8,6 +8,7 @@ import {
 import { usePayroll } from '../../contexts/PayrollContext';
 import { useDepartments } from '../../contexts/DepartmentContext';
 import { useSettings } from '../../contexts/SettingsContext';
+import { useNotifications } from '../../contexts/NotificationsContext';
 import PayrollDetailsModal from '../../components/Payroll/PayrollDetailsModal';
 import PayslipModal from '../../components/Payroll/PayslipModal';
 
@@ -47,6 +48,7 @@ export default function AdminPayroll() {
   const { records, periods, updateRecord, markAsPaid, markMultipleAsPaid, generatePayroll, generatePayrollForPeriod, getPayrollStats } = usePayroll();
   const { departments } = useDepartments();
   const { formatCurrency } = useSettings();
+  const { addNotification } = useNotifications();
 
   const [search, setSearch] = useState('');
   const [deptFilter, setDeptFilter] = useState('all');
@@ -127,7 +129,19 @@ export default function AdminPayroll() {
   }), [records]);
 
   const handleMarkAsPaid = (id) => {
+    const record = records.find(r => r.id === id);
     markAsPaid(id);
+    if (record) {
+      addNotification({
+        title: 'Salary Paid',
+        description: `Your salary for ${record.period} ($${record.netSalary?.toLocaleString()}) has been deposited. Check your bank account.`,
+        timestamp: new Date().toISOString(),
+        category: 'Payroll',
+        priority: 'High',
+        read: false,
+        targetEmployeeId: record.employeeId,
+      });
+    }
   };
 
   const handleEditClick = (record) => {
@@ -201,8 +215,29 @@ export default function AdminPayroll() {
     const existingCount = records.filter(r => r.periodKey === generateTarget.key).length;
     if (existingCount > 0) {
       generatePayroll(generateTarget.key);
+      const affectedRecords = records.filter(r => r.periodKey === generateTarget.key && r.status === 'Pending');
+      affectedRecords.forEach(r => {
+        addNotification({
+          title: 'Payroll Processed',
+          description: `Your salary for ${generateTarget.label} has been processed. Net pay: $${r.netSalary?.toLocaleString()}. Payment will be deposited shortly.`,
+          timestamp: new Date().toISOString(),
+          category: 'Payroll',
+          priority: 'High',
+          read: false,
+          targetEmployeeId: r.employeeId,
+        });
+      });
     } else {
       generatePayrollForPeriod(generateTarget.key, generateTarget.label);
+      addNotification({
+        title: 'Payroll Generated',
+        description: `${generateTarget.label} payroll has been generated for all employees. Reviews and approvals are pending.`,
+        timestamp: new Date().toISOString(),
+        category: 'Payroll',
+        priority: 'High',
+        read: false,
+        targetEmployeeId: null,
+      });
     }
     setGenerateConfirm(false);
     setGenerateTarget(null);

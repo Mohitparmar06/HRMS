@@ -147,8 +147,7 @@ export default function AdminSettings() {
         category: 'System',
         priority: 'Medium',
         read: false,
-        employeeId: null,
-        employeeName: null,
+        targetEmployeeId: null,
       });
     }
   }, [addNotification]);

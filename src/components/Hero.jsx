@@ -109,7 +109,7 @@ export default function Hero() {
                 <Clock size={16} />
               </div>
               <div className="badge-info">
-                <span className="badge-title">Sarah J. Clocked In</span>
+                <span className="badge-title">Employee Clocked In</span>
                 <span className="badge-num">{clockInTime}</span>
               </div>
             </div>
@@ -121,7 +121,7 @@ export default function Hero() {
               </div>
               <div className="badge-info">
                 <span className="badge-title">Leave Approved</span>
-                <span className="badge-num">David Cole (Vacation)</span>
+                <span className="badge-num">Annual Leave Request</span>
               </div>
             </div>
           </div>

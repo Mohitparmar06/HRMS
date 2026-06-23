@@ -1,10 +1,11 @@
 import { useState, useMemo } from 'react';
 import {
   CheckCircle, XCircle, Clock, CalendarDays, TrendingUp,
-  Plus, Eye, X, AlertTriangle, FileText, Calendar, Award
+  Plus, X, AlertTriangle, Award
 } from 'lucide-react';
+import { useAuth } from '../../contexts/AuthContext';
 import { useLeave } from '../../contexts/LeaveContext';
-import { employees } from '../../services/dummyData';
+import { useNotifications } from '../../contexts/NotificationsContext';
 import LeaveApplicationForm from '../../components/Leave/LeaveApplicationForm';
 import LeaveDetailsModal from '../../components/Leave/LeaveDetailsModal';
 
@@ -38,9 +39,11 @@ function formatDate(dateStr) {
 }
 
 export default function EmployeeLeave() {
+  const { user } = useAuth();
   const { getEmployeeLeaves, getLeaveBalance, cancelLeave, leaveBalanceConfig } = useLeave();
+  const { addNotification } = useNotifications();
 
-  const currentEmp = employees.find(e => e.email === 'employee@dayflow.com') || employees[0];
+  const currentEmp = user;
   const empLeaves = useMemo(() => getEmployeeLeaves(currentEmp.id), [currentEmp.id, getEmployeeLeaves]);
   const balance = useMemo(() => getLeaveBalance(currentEmp.id), [currentEmp.id, getLeaveBalance]);
 
@@ -54,7 +57,6 @@ export default function EmployeeLeave() {
 
   const totalUsed = Object.values(balance).reduce((sum, b) => sum + b.used, 0);
   const totalRemaining = Object.values(balance).reduce((sum, b) => sum + b.remaining, 0);
-  const totalAllocated = Object.values(balance).reduce((sum, b) => sum + b.total, 0);
 
   return (
     <div className="leave-page">
@@ -244,7 +246,19 @@ export default function EmployeeLeave() {
               </p>
               <div className="leave-form-actions">
                 <button className="btn btn-outline" onClick={() => setCancelConfirm(null)}>Keep Request</button>
-                <button className="btn btn-danger" onClick={() => { cancelLeave(cancelConfirm.id); setCancelConfirm(null); }}>
+                <button className="btn btn-danger" onClick={() => {
+                  addNotification({
+                    title: 'Leave Cancelled',
+                    description: `${user.firstName} ${user.lastName} cancelled their ${cancelConfirm.leaveType} request (${formatDate(cancelConfirm.startDate)} - ${formatDate(cancelConfirm.endDate)}).`,
+                    timestamp: new Date().toISOString(),
+                    category: 'Leave',
+                    priority: 'Medium',
+                    read: false,
+                    targetEmployeeId: null,
+                  });
+                  cancelLeave(cancelConfirm.id);
+                  setCancelConfirm(null);
+                }}>
                   <X size={16} /> Cancel Leave
                 </button>
               </div>

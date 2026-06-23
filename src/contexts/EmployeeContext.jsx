@@ -12,7 +12,7 @@ function enrichEmployee(emp) {
     dob: `${2000 - (rand % 25)}-${String((rand % 12) + 1).padStart(2, '0')}-${String((rand % 28) + 1).padStart(2, '0')}`,
     address: `${100 + rand} Innovation Drive, San Francisco, CA ${94000 + (rand % 100)}`,
     emergencyContact: `+1 (${500 + (rand % 499)}) ${100 + (rand % 900)}-${1000 + (rand % 9000)}`,
-    emergencyName: emp.firstName === 'James' ? 'Mary Smith' : 'John Doe',
+    emergencyName: `Contact of ${emp.firstName}`,
     profilePicture: null,
   };
 }

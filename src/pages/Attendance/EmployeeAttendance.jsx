@@ -4,7 +4,7 @@ import {
   TrendingUp, Calendar, Clock, Award, Flame
 } from 'lucide-react';
 import { useAttendance } from '../../contexts/AttendanceContext';
-import { employees } from '../../services/dummyData';
+import { useAuth } from '../../contexts/AuthContext';
 import AttendanceCalendar from '../../components/Attendance/AttendanceCalendar';
 import CheckInOutCard from '../../components/Attendance/CheckInOutCard';
 import AttendanceDetailModal from '../../components/Attendance/AttendanceDetailModal';
@@ -31,8 +31,9 @@ const STATUS_COLORS = {
 
 export default function EmployeeAttendance() {
   const { attendanceRecords, getStats, getEmployeeRecords, checkIn: doCheckIn, checkOut: doCheckOut, todayCheckIn, todayCheckOut } = useAttendance();
+  const { user } = useAuth();
 
-  const currentEmp = employees.find(e => e.email === 'employee@dayflow.com') || employees[0];
+  const currentEmp = user;
   const empRecords = useMemo(() => getEmployeeRecords(currentEmp.id), [currentEmp.id, getEmployeeRecords, attendanceRecords]);
 
   const [selectedDate, setSelectedDate] = useState(null);

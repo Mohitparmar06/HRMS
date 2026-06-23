@@ -8,6 +8,7 @@ import {
 import { useLeave } from '../../contexts/LeaveContext';
 import { employees } from '../../services/dummyData';
 import { useDepartments } from '../../contexts/DepartmentContext';
+import { useNotifications } from '../../contexts/NotificationsContext';
 import LeaveDetailsModal from '../../components/Leave/LeaveDetailsModal';
 
 const STATUS_ICONS = {
@@ -47,6 +48,7 @@ function formatDate(dateStr) {
 export default function AdminLeave() {
   const { leaveRecords, approveLeave, rejectLeave, getLeaveStats, getLeaveByType, getEmployeeLeaves, getLeaveBalance } = useLeave();
   const { departments } = useDepartments();
+  const { addNotification } = useNotifications();
 
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -115,7 +117,19 @@ export default function AdminLeave() {
   };
 
   const handleApprove = (id) => {
+    const record = leaveRecords.find(r => r.id === id);
     approveLeave(id, 'Admin');
+    if (record) {
+      addNotification({
+        title: 'Leave Approved',
+        description: `Your ${record.leaveType} request for ${record.startDate} to ${record.endDate} (${record.duration} days) has been approved by Admin.`,
+        timestamp: new Date().toISOString(),
+        category: 'Leave',
+        priority: 'Low',
+        read: false,
+        targetEmployeeId: record.employeeId,
+      });
+    }
   };
 
   const handleRejectClick = (record) => {
@@ -125,7 +139,19 @@ export default function AdminLeave() {
 
   const handleRejectConfirm = () => {
     if (!rejectReason.trim()) return;
+    const record = rejectDialog;
     rejectLeave(rejectDialog.id, rejectReason.trim(), 'Admin');
+    if (record) {
+      addNotification({
+        title: 'Leave Rejected',
+        description: `Your ${record.leaveType} request for ${record.startDate} to ${record.endDate} has been rejected. Reason: ${rejectReason.trim()}`,
+        timestamp: new Date().toISOString(),
+        category: 'Leave',
+        priority: 'Medium',
+        read: false,
+        targetEmployeeId: record.employeeId,
+      });
+    }
     setRejectDialog(null);
     setRejectReason('');
   };

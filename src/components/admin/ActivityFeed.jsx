@@ -1,5 +1,6 @@
-import React from 'react';
+import { useMemo } from 'react';
 import { CheckCircle, Clock, AlertCircle, UserPlus, Wallet, Bell as BellIcon, CalendarCheck } from 'lucide-react';
+import { useNotifications } from '../../contexts/NotificationsContext';
 
 const activityConfig = {
   'employee_registered': { icon: UserPlus, color: '#3b82f6', bg: 'rgba(59,130,246,0.1)' },
@@ -9,26 +10,59 @@ const activityConfig = {
   'leave_pending': { icon: AlertCircle, color: '#f97316', bg: 'rgba(249,115,22,0.1)' },
 };
 
-const activities = [
-  { id: 1, type: 'employee_registered', title: 'New Employee Registered', desc: 'Sophia Torres has been added to Engineering', time: '5 minutes ago' },
-  { id: 2, type: 'leave_approved', title: 'Leave Approved', desc: 'James Wilson\'s annual leave request approved', time: '20 minutes ago' },
-  { id: 3, type: 'payroll_generated', title: 'Payroll Generated', desc: 'June 2026 payroll processed for 150 employees', time: '1 hour ago' },
-  { id: 4, type: 'attendance_updated', title: 'Attendance Updated', desc: '12 employees marked as late for today', time: '2 hours ago' },
-  { id: 5, type: 'leave_pending', title: 'Leave Pending Approval', desc: '3 new leave requests awaiting review', time: '3 hours ago' },
-  { id: 6, type: 'employee_registered', title: 'New Employee Registered', desc: 'Liam Chen has been added to Design', time: '5 hours ago' },
-  { id: 7, type: 'attendance_updated', title: 'Attendance Summary', desc: 'Daily attendance report generated', time: '8 hours ago' },
-];
+const categoryToActivityType = {
+  'Leave': 'leave_pending',
+  'Attendance': 'attendance_updated',
+  'Payroll': 'payroll_generated',
+  'Employee': 'employee_registered',
+  'System': 'attendance_updated',
+};
+
+function formatTimeAgo(timestamp) {
+  const diff = Date.now() - new Date(timestamp).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return 'Just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  return `${days}d ago`;
+}
 
 export default function ActivityFeed() {
+  const { notifications } = useNotifications();
+
+  const activities = useMemo(() => {
+    const adminNotifs = notifications
+      .filter(n => n.targetEmployeeId === null || n.targetEmployeeId === undefined)
+      .slice(0, 7);
+
+    if (adminNotifs.length === 0) {
+      return [
+        { id: 1, type: 'attendance_updated', title: 'System Ready', desc: 'Dayflow HRMS is active and monitoring attendance.', time: 'Just now' },
+      ];
+    }
+
+    return adminNotifs.map((n, i) => {
+      const type = categoryToActivityType[n.category] || 'attendance_updated';
+      return {
+        id: n.id || i,
+        type,
+        title: n.title,
+        desc: n.description.length > 80 ? n.description.slice(0, 80) + '...' : n.description,
+        time: formatTimeAgo(n.timestamp),
+      };
+    });
+  }, [notifications]);
+
   return (
     <div className="admin-activity-feed">
       <div className="admin-activity-header">
         <h4>Recent Activity</h4>
-        <button className="admin-activity-view-all">View All</button>
       </div>
       <div className="admin-activity-list">
         {activities.map(act => {
-          const config = activityConfig[act.type] || activityConfig['employee_registered'];
+          const config = activityConfig[act.type] || activityConfig['attendance_updated'];
           const Icon = config.icon;
           return (
             <div key={act.id} className="admin-activity-item">

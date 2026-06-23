@@ -159,7 +159,7 @@ export default function Register() {
                     id="fullName"
                     type="text"
                     className={`form-input ${errors.fullName ? 'error' : ''}`}
-                    placeholder="e.g. David Cole"
+                    placeholder="Enter your full name"
                     value={fullName}
                     onChange={(e) => {
                       setFullName(e.target.value);

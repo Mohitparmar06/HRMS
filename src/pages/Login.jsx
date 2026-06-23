@@ -1,9 +1,11 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Eye, EyeOff, ArrowRight, AlertCircle, Clock, Users, ArrowUpRight } from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
 
 export default function Login() {
   const navigate = useNavigate();
+  const { login } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -60,6 +62,7 @@ export default function Login() {
         setIsLoading(false);
         const user = DEMO_USERS[email.toLowerCase().trim()];
         if (user && user.password === password) {
+          login(email.toLowerCase().trim(), user.role);
           navigate(user.redirect);
         } else {
           setLoginError('Invalid email or password');
@@ -244,6 +247,7 @@ export default function Login() {
                 setIsLoading(true);
                 setTimeout(() => {
                   setIsLoading(false);
+                  login('employee@dayflow.com', 'Employee');
                   navigate('/dashboard');
                 }, 1200);
               }}

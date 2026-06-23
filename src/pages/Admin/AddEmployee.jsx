@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Save, Upload, User } from 'lucide-react';
 import { useEmployees } from '../../contexts/EmployeeContext';
+import { useNotifications } from '../../contexts/NotificationsContext';
 import { departments } from '../../services/dummyData';
 
 const positionsByDept = {
@@ -25,6 +26,7 @@ const initialForm = {
 export default function AddEmployee() {
   const navigate = useNavigate();
   const { addEmployee, getNextId } = useEmployees();
+  const { addNotification } = useNotifications();
   const [form, setForm] = useState(initialForm);
   const [errors, setErrors] = useState({});
   const [profilePreview, setProfilePreview] = useState(null);
@@ -92,6 +94,17 @@ export default function AddEmployee() {
       emergencyContact: form.emergencyContact,
       profilePicture: profilePreview,
     });
+
+    addNotification({
+      title: 'New Employee Added',
+      description: `${name} (${nextId}) has been added to the ${form.department} department as ${form.position}.`,
+      timestamp: new Date().toISOString(),
+      category: 'Employee',
+      priority: 'Medium',
+      read: false,
+      targetEmployeeId: null,
+    });
+
     navigate('/admin/employees');
   };
 
@@ -136,12 +149,12 @@ export default function AddEmployee() {
             <div className="emp-field-row">
               <div className="emp-field">
                 <label>First Name *</label>
-                <input type="text" value={form.firstName} onChange={e => handleChange('firstName', e.target.value)} placeholder="e.g. Sarah" className={errors.firstName ? 'error' : ''} />
+                <input type="text" value={form.firstName} onChange={e => handleChange('firstName', e.target.value)} placeholder="First name" className={errors.firstName ? 'error' : ''} />
                 {errors.firstName && <span className="emp-error">{errors.firstName}</span>}
               </div>
               <div className="emp-field">
                 <label>Last Name *</label>
-                <input type="text" value={form.lastName} onChange={e => handleChange('lastName', e.target.value)} placeholder="e.g. Chen" className={errors.lastName ? 'error' : ''} />
+                <input type="text" value={form.lastName} onChange={e => handleChange('lastName', e.target.value)} placeholder="Last name" className={errors.lastName ? 'error' : ''} />
                 {errors.lastName && <span className="emp-error">{errors.lastName}</span>}
               </div>
             </div>

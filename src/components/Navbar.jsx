@@ -43,6 +43,7 @@ export default function Navbar() {
             <li><a href="#how-it-works">How It Works</a></li>
             <li><a href="#testimonials">Testimonials</a></li>
             <li><a href="#faq">FAQ</a></li>
+            <li><a href="#demo">Request Demo</a></li>
           </ul>
         </nav>
 
@@ -71,6 +72,7 @@ export default function Navbar() {
           <li><a href="#how-it-works" onClick={closeMenu}>How It Works</a></li>
           <li><a href="#testimonials" onClick={closeMenu}>Testimonials</a></li>
           <li><a href="#faq" onClick={closeMenu}>FAQ</a></li>
+          <li><a href="#demo" onClick={closeMenu}>Request Demo</a></li>
         </ul>
         <div className="nav-actions">
           <Link to="/login" className="btn btn-secondary" onClick={closeMenu}>Login</Link>

@@ -1,10 +1,10 @@
 import { useState, useMemo } from 'react';
 import {
   DollarSign, TrendingUp, Clock, CheckCircle, Download,
-  Eye, Wallet, Calendar, FileText
+  Eye, Wallet, Calendar
 } from 'lucide-react';
 import { usePayroll } from '../../contexts/PayrollContext';
-import { employees } from '../../services/dummyData';
+import { useAuth } from '../../contexts/AuthContext';
 import PayslipModal from '../../components/Payroll/PayslipModal';
 import PayrollDetailsModal from '../../components/Payroll/PayrollDetailsModal';
 
@@ -70,9 +70,10 @@ function downloadPayslip(record) {
 
 export default function EmployeePayroll() {
   const { getEmployeePayroll } = usePayroll();
+  const { user } = useAuth();
 
-  const currentEmp = employees.find(e => e.email === 'employee@dayflow.com') || employees[0];
-  const empRecords = useMemo(() => getEmployeePayroll(currentEmp.id), [currentEmp.id, getEmployeePayroll]);
+  const currentEmp = user;
+  const empRecords = useMemo(() => getEmployeePayroll(user.id), [user.id, getEmployeePayroll]);
 
   const [activeTab, setActiveTab] = useState('overview');
   const [payslipRecord, setPayslipRecord] = useState(null);
@@ -84,7 +85,6 @@ export default function EmployeePayroll() {
   );
 
   const currentMonth = sortedRecords[0];
-  const previousMonths = sortedRecords.slice(1);
 
   const totalReceived = empRecords.filter(r => r.status === 'Paid').reduce((s, r) => s + r.netSalary, 0);
   const totalDeductions = empRecords.reduce((s, r) => s + r.totalDeductions, 0);

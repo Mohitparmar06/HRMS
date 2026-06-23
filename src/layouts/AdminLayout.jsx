@@ -7,7 +7,6 @@ import { DepartmentProvider } from '../contexts/DepartmentContext';
 import { AttendanceProvider } from '../contexts/AttendanceContext';
 import { LeaveProvider } from '../contexts/LeaveContext';
 import { PayrollProvider } from '../contexts/PayrollContext';
-import { NotificationsProvider } from '../contexts/NotificationsContext';
 import { SettingsProvider } from '../contexts/SettingsContext';
 
 export default function AdminLayout() {
@@ -21,7 +20,6 @@ export default function AdminLayout() {
           <AttendanceProvider>
             <LeaveProvider>
               <PayrollProvider>
-                <NotificationsProvider>
                 <div className="admin-layout">
                   <AdminSidebar
                     collapsed={sidebarCollapsed}
@@ -38,7 +36,6 @@ export default function AdminLayout() {
                     </main>
                   </div>
                 </div>
-                </NotificationsProvider>
               </PayrollProvider>
             </LeaveProvider>
           </AttendanceProvider>

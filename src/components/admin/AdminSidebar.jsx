@@ -2,7 +2,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard, Users, Building2, Clock, CalendarDays, Wallet,
   BarChart3, Bell, Settings, LogOut, ChevronLeft, ChevronRight,
-  Shield
+  Shield, Monitor
 } from 'lucide-react';
 import { useSettings } from '../../contexts/SettingsContext';
 
@@ -14,6 +14,7 @@ const menuItems = [
   { name: 'Leave Management', icon: CalendarDays, path: '/admin/leave' },
   { name: 'Payroll', icon: Wallet, path: '/admin/payroll' },
   { name: 'Reports & Analytics', icon: BarChart3, path: '/admin/reports' },
+  { name: 'Demo Requests', icon: Monitor, path: '/admin/demo-requests' },
   { name: 'Notifications', icon: Bell, path: '/admin/notifications' },
   { name: 'Settings', icon: Settings, path: '/admin/settings' },
 ];
