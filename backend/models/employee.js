@@ -35,6 +35,63 @@ const employeeSchema = new mongoose.Schema(
       type: Number,
       default: 0,
     },
+    phone: {
+      type: String,
+      default: "",
+    },
+
+    joinDate: {
+      type: String,
+      default: "",
+    },
+    gender: {
+  type: String,
+  default: "",
+},
+
+dob: {
+  type: String,
+  default: "",
+},
+
+address: {
+  type: String,
+  default: "",
+},
+
+emergencyName: {
+  type: String,
+  default: "",
+},
+
+emergencyContact: {
+  type: String,
+  default: "",
+},
+
+profilePicture: {
+  type: String,
+  default: "",
+},
+lastCheckIn: {
+  type: String,
+  default: "",
+},
+
+performance: {
+  type: Number,
+  default: 75,
+},
+
+projectsCompleted: {
+  type: Number,
+  default: 0,
+},
+
+hoursWorked: {
+  type: Number,
+  default: 0,
+},
 
     status: {
       type: String,
