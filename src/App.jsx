@@ -2,6 +2,7 @@ import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
 import { NotificationsProvider } from './contexts/NotificationsContext';
 import { DemoRequestProvider } from './contexts/DemoRequestContext';
+import { SettingsProvider } from './contexts/SettingsContext';
 import Navbar from './components/Navbar';
 import Hero from './components/Hero';
 import Features from './components/Features';
@@ -65,6 +66,7 @@ export default function App() {
       <AuthProvider>
         <NotificationsProvider>
           <DemoRequestProvider>
+            <SettingsProvider>
             <Routes>
             <Route path="/" element={<LandingPage />} />
             <Route path="/login" element={<Login />} />
@@ -100,6 +102,7 @@ export default function App() {
               <Route path="demo-requests" element={<AdminDemoRequests />} />
             </Route>
             </Routes>
+            </SettingsProvider>
           </DemoRequestProvider>
         </NotificationsProvider>
       </AuthProvider>

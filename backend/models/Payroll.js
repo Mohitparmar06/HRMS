@@ -8,14 +8,44 @@ const payrollSchema = new mongoose.Schema(
       required: true,
     },
 
-    month: {
+    period: {
       type: String,
       required: true,
     },
 
-    basicSalary: {
+    periodKey: {
+      type: String,
+      required: true,
+    },
+
+    baseSalary: {
       type: Number,
       required: true,
+    },
+
+    allowances: {
+      type: Number,
+      default: 0,
+    },
+
+    hra: {
+      type: Number,
+      default: 0,
+    },
+
+    transport: {
+      type: Number,
+      default: 0,
+    },
+
+    medical: {
+      type: Number,
+      default: 0,
+    },
+
+    specialAllowance: {
+      type: Number,
+      default: 0,
     },
 
     bonus: {
@@ -23,7 +53,42 @@ const payrollSchema = new mongoose.Schema(
       default: 0,
     },
 
-    deductions: {
+    overtimePay: {
+      type: Number,
+      default: 0,
+    },
+
+    grossSalary: {
+      type: Number,
+      required: true,
+    },
+
+    pf: {
+      type: Number,
+      default: 0,
+    },
+
+    professionalTax: {
+      type: Number,
+      default: 0,
+    },
+
+    incomeTax: {
+      type: Number,
+      default: 0,
+    },
+
+    insurance: {
+      type: Number,
+      default: 0,
+    },
+
+    otherDeductions: {
+      type: Number,
+      default: 0,
+    },
+
+    totalDeductions: {
       type: Number,
       default: 0,
     },
@@ -32,11 +97,24 @@ const payrollSchema = new mongoose.Schema(
       type: Number,
       required: true,
     },
+
+    status: {
+      type: String,
+      enum: ["Pending", "Paid"],
+      default: "Pending",
+    },
+
+    paymentDate: {
+      type: Date,
+      default: null,
+    },
   },
   {
     timestamps: true,
   }
 );
+
+payrollSchema.index({ employeeId: 1, periodKey: 1 }, { unique: true });
 
 module.exports =
   mongoose.models.Payroll ||

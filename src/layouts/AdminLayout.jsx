@@ -2,12 +2,21 @@ import { useState } from 'react';
 import { Outlet } from 'react-router-dom';
 import AdminSidebar from '../components/admin/AdminSidebar';
 import AdminNavbar from '../components/admin/AdminNavbar';
-import { EmployeeProvider } from '../contexts/EmployeeContext';
+import { EmployeeProvider, useEmployees } from '../contexts/EmployeeContext';
 import { DepartmentProvider } from '../contexts/DepartmentContext';
 import { AttendanceProvider } from '../contexts/AttendanceContext';
 import { LeaveProvider } from '../contexts/LeaveContext';
 import { PayrollProvider } from '../contexts/PayrollContext';
 import { SettingsProvider } from '../contexts/SettingsContext';
+
+function AdminAttendanceWrapper({ children }) {
+  const { employees } = useEmployees();
+  return (
+    <AttendanceProvider employees={employees}>
+      {children}
+    </AttendanceProvider>
+  );
+}
 
 export default function AdminLayout() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -17,7 +26,7 @@ export default function AdminLayout() {
     <SettingsProvider>
       <EmployeeProvider>
         <DepartmentProvider>
-          <AttendanceProvider>
+          <AdminAttendanceWrapper>
             <LeaveProvider>
               <PayrollProvider>
                 <div className="admin-layout">
@@ -38,7 +47,7 @@ export default function AdminLayout() {
                 </div>
               </PayrollProvider>
             </LeaveProvider>
-          </AttendanceProvider>
+          </AdminAttendanceWrapper>
         </DepartmentProvider>
       </EmployeeProvider>
     </SettingsProvider>

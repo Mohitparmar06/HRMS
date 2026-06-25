@@ -1,37 +1,20 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { useEmployees } from '../../contexts/EmployeeContext';
 import { useLeave } from '../../contexts/LeaveContext';
 import { usePayroll } from '../../contexts/PayrollContext';
 import { useAttendance } from '../../contexts/AttendanceContext';
 import { useSettings } from '../../contexts/SettingsContext';
 import {
-  employees as allEmployees,
-  departments,
-  employeeGrowth,
-  weeklyAttendance,
-} from '../../services/dummyData';
-import {
-  Users,
-  Calendar,
-  Wallet,
-  CheckCircle,
-  XCircle,
-  Building2,
-  Download,
-  Filter,
-  FileText,
-  Printer,
-  ChevronDown,
-  ChevronUp,
-  Target,
-  Search,
-  Eye,
-  FileSpreadsheet,
-  File,
-  TrendingUp,
-  Award,
-  AlertTriangle,
+  Users, Calendar, Wallet, CheckCircle, XCircle, Building2,
+  Download, Filter, FileText, Printer, ChevronDown, ChevronUp,
+  Target, Search, Eye, FileSpreadsheet, File, TrendingUp,
+  Award, AlertTriangle, BarChart3, PieChart, Activity,
 } from 'lucide-react';
+import * as XLSX from 'xlsx';
+import ChartCard from '../../components/admin/ChartCard';
+import LineChart from '../../components/admin/LineChart';
+import DonutChart from '../../components/admin/DonutChart';
+import BarChart from '../../components/admin/BarChart';
 
 const REPORT_TYPES = [
   { key: 'overview', label: 'Overview', icon: FileText },
@@ -43,41 +26,52 @@ const REPORT_TYPES = [
 ];
 
 const REPORT_TYPE_OPTIONS = ['All', 'Employee', 'Attendance', 'Leave', 'Payroll', 'Department'];
-const STATUS_OPTIONS = ['All', 'Completed', 'Pending', 'In Progress'];
+const STATUS_OPTIONS = ['All', 'Active', 'Inactive', 'Pending', 'Approved', 'Rejected', 'Paid', 'On Leave'];
 
 const MONTHS = [
   'January', 'February', 'March', 'April', 'May', 'June',
   'July', 'August', 'September', 'October', 'November', 'December',
 ];
 
-const YEARS = [2026, 2025, 2024];
+const LEAVE_COLORS = {
+  'Casual Leave': '#3b82f6',
+  'Sick Leave': '#a855f7',
+  'Earned Leave': '#f59e0b',
+  'Maternity Leave': '#ec4899',
+  'Paternity Leave': '#06b6d4',
+  'Work From Home': '#10b981',
+};
 
-const MOCK_REPORTS = [
-  { id: 1, name: 'Monthly Employee Summary', category: 'Employee', department: 'HR', generatedDate: '2026-06-20', generatedBy: 'Sarah Mitchell', status: 'Completed' },
-  { id: 2, name: 'Weekly Attendance Log', category: 'Attendance', department: 'Engineering', generatedDate: '2026-06-19', generatedBy: 'James Wilson', status: 'Completed' },
-  { id: 3, name: 'Q2 Payroll Breakdown', category: 'Payroll', department: 'Finance', generatedDate: '2026-06-18', generatedBy: 'Emily Chen', status: 'Completed' },
-  { id: 4, name: 'Leave Utilization Report', category: 'Leave', department: 'HR', generatedDate: '2026-06-17', generatedBy: 'Sarah Mitchell', status: 'Pending' },
-  { id: 5, name: 'Department Headcount', category: 'Department', department: 'Operations', generatedDate: '2026-06-16', generatedBy: 'Michael Brown', status: 'Completed' },
-  { id: 6, name: 'Employee Onboarding Status', category: 'Employee', department: 'HR', generatedDate: '2026-06-15', generatedBy: 'Sarah Mitchell', status: 'Completed' },
-  { id: 7, name: 'Overtime Hours Summary', category: 'Attendance', department: 'Engineering', generatedDate: '2026-06-14', generatedBy: 'James Wilson', status: 'In Progress' },
-  { id: 8, name: 'Benefits Enrollment Report', category: 'Employee', department: 'Finance', generatedDate: '2026-06-13', generatedBy: 'Emily Chen', status: 'Completed' },
-  { id: 9, name: 'Monthly Absenteeism Analysis', category: 'Attendance', department: 'Marketing', generatedDate: '2026-06-12', generatedBy: 'Lisa Anderson', status: 'Pending' },
-  { id: 10, name: 'Salary Revision Tracker', category: 'Payroll', department: 'HR', generatedDate: '2026-06-11', generatedBy: 'Sarah Mitchell', status: 'Completed' },
-  { id: 11, name: 'Team Performance Overview', category: 'Department', department: 'Engineering', generatedDate: '2026-06-10', generatedBy: 'James Wilson', status: 'Completed' },
-  { id: 12, name: 'Leave Balance Report', category: 'Leave', department: 'Sales', generatedDate: '2026-06-09', generatedBy: 'David Park', status: 'Completed' },
-];
+function toLocalDateStr(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function getLastNMonths(n) {
+  const months = [];
+  const now = new Date();
+  for (let i = n - 1; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    months.push({
+      key: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`,
+      label: d.toLocaleString('default', { month: 'short' }),
+    });
+  }
+  return months;
+}
 
 export default function AdminReports() {
-  const { employees: empCtx } = useEmployees();
-  const { leaveRecords, getLeaveStats } = useLeave();
-  const { records: payrollRecords, getPayrollStats } = usePayroll();
-  const { attendanceRecords, getStats } = useAttendance();
-  const { settings, formatCurrency } = useSettings();
+  const { employees: empCtx, departments } = useEmployees();
+  const allEmployees = empCtx || [];
+  const { leaveRecords, getLeaveStats, getLeaveByType } = useLeave();
+  const { records: payrollRecords, getPayrollStats, getDepartmentPayroll } = usePayroll();
+  const { attendanceRecords, getStats, getWeeklyTrend, getMonthlySummary } = useAttendance();
+  const { settings } = useSettings();
 
   const [activeReport, setActiveReport] = useState('overview');
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth());
-  const [selectedYear, setSelectedYear] = useState(2026);
+  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const [selectedDept, setSelectedDept] = useState('All');
+  const [selectedEmployee, setSelectedEmployee] = useState('All');
   const [selectedReportType, setSelectedReportType] = useState('All');
   const [selectedStatus, setSelectedStatus] = useState('All');
   const [searchQuery, setSearchQuery] = useState('');
@@ -85,13 +79,29 @@ export default function AdminReports() {
   const [showFilters, setShowFilters] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [viewReportData, setViewReportData] = useState(null);
+  const [dateRangeStart, setDateRangeStart] = useState('');
+  const [dateRangeEnd, setDateRangeEnd] = useState('');
+
+  const employeeGrowth = useMemo(() => {
+    const months = getLastNMonths(6);
+    let cumulative = allEmployees.filter(e => {
+      if (!e.joinDate) return false;
+      return e.joinDate.substring(0, 7) < months[0].key;
+    }).length;
+
+    return months.map(m => {
+      const joined = allEmployees.filter(e => e.joinDate && e.joinDate.startsWith(m.key)).length;
+      cumulative += joined;
+      return { month: m.label, count: cumulative };
+    });
+  }, [allEmployees]);
 
   const todaysAttendance = useMemo(() => {
     if (!attendanceRecords || attendanceRecords.length === 0) {
       return { present: 0, absent: 0, late: 0, halfDay: 0, onLeave: 0 };
     }
     const today = new Date();
-    const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+    const todayStr = toLocalDateStr(today);
     let todayRecords = attendanceRecords.filter((r) => r.date === todayStr);
     if (todayRecords.length === 0) {
       const allDates = [...new Set(attendanceRecords.map((r) => r.date))].sort().reverse();
@@ -118,8 +128,8 @@ export default function AdminReports() {
   }, [getLeaveStats, leaveRecords]);
 
   const payrollStats = useMemo(() => {
-    if (!getPayrollStats) return { totalPayroll: 0, paidCount: 0, pendingCount: 0, totalDeductions: 0, totalBonuses: 0 };
-    return getPayrollStats() || { totalPayroll: 0, paidCount: 0, pendingCount: 0, totalDeductions: 0, totalBonuses: 0 };
+    if (!getPayrollStats) return { totalPayroll: 0, paidCount: 0, pendingCount: 0, totalDeductions: 0, totalBonuses: 0, totalNet: 0 };
+    return getPayrollStats() || { totalPayroll: 0, paidCount: 0, pendingCount: 0, totalDeductions: 0, totalBonuses: 0, totalNet: 0 };
   }, [getPayrollStats, payrollRecords]);
 
   const stats = useMemo(() => {
@@ -130,10 +140,9 @@ export default function AdminReports() {
     const lateToday = todaysAttendance.late || 0;
     const halfDayToday = todaysAttendance.halfDay || 0;
     const onLeaveToday = todaysAttendance.onLeave || 0;
-    const attendanceRate =
-      totalEmp > 0 ? Math.round(((presentToday + lateToday + halfDayToday) / totalEmp) * 100) : 0;
+    const attendanceRate = totalEmp > 0 ? Math.round(((presentToday + lateToday + halfDayToday) / totalEmp) * 100) : 0;
 
-    const totalPayrollAmount = payrollStats.totalPayroll || 0;
+    const totalPayrollAmount = payrollStats.totalNet || 0;
     const totalBonuses = payrollStats.totalBonuses || 0;
     const totalDeductions = payrollStats.totalDeductions || 0;
     const avgSalary = activeEmp > 0 ? Math.round(totalPayrollAmount / activeEmp) : 0;
@@ -147,7 +156,7 @@ export default function AdminReports() {
     payrollRecords.forEach((rec) => {
       const emp = allEmployees.find((e) => e.id === rec.employeeId);
       if (emp) {
-        deptPayroll[emp.department] = (deptPayroll[emp.department] || 0) + rec.netSalary;
+        deptPayroll[emp.department] = (deptPayroll[emp.department] || 0) + (rec.netSalary || 0);
       }
     });
 
@@ -162,11 +171,9 @@ export default function AdminReports() {
 
     const bestAttDept = Object.entries(deptCounts).reduce((best, [dept, count]) => {
       const deptEmpIds = allEmployees.filter((e) => e.department === dept).map((e) => e.id);
+      const today = toLocalDateStr(new Date());
       const deptTodayRecords = attendanceRecords.filter(
-        (r) => deptEmpIds.includes(r.employeeId) && r.date === (() => {
-          const today = new Date();
-          return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-        })()
+        (r) => deptEmpIds.includes(r.employeeId) && r.date === today
       );
       const deptPresent = deptTodayRecords.filter((r) => r.status === 'present' || r.status === 'late' || r.status === 'half-day').length;
       const rate = count > 0 ? Math.round((deptPresent / count) * 100) : 0;
@@ -181,41 +188,71 @@ export default function AdminReports() {
       return count > best.count ? { dept, count } : best;
     }, { dept: 'N/A', count: 0 }).dept;
 
-    const empGrowthThisMonth = employeeGrowth.length > 0
+    const empGrowthThisMonth = employeeGrowth && employeeGrowth.length >= 2
       ? employeeGrowth[employeeGrowth.length - 1].count - employeeGrowth[employeeGrowth.length - 2].count
       : 0;
 
     return {
-      totalEmp,
-      activeEmp,
-      presentToday,
-      absentToday,
-      lateToday,
-      halfDayToday,
-      attendanceRate,
-      onLeaveToday,
-      totalPayrollAmount,
-      totalBonuses,
-      totalDeductions,
-      avgSalary,
-      deptCounts,
-      bestAttDept,
-      highestPayDept,
-      mostLeaveDept,
-      empGrowthThisMonth,
+      totalEmp, activeEmp, presentToday, absentToday, lateToday, halfDayToday,
+      attendanceRate, onLeaveToday, totalPayrollAmount, totalBonuses, totalDeductions,
+      avgSalary, deptCounts, bestAttDept, highestPayDept, mostLeaveDept, empGrowthThisMonth,
     };
-  }, [empCtx, leaveStats, payrollStats, todaysAttendance, leaveRecords, payrollRecords, attendanceRecords]);
+  }, [allEmployees, todaysAttendance, payrollStats, attendanceRecords, leaveRecords, employeeGrowth]);
+
+  const weeklyAttendanceData = useMemo(() => getWeeklyTrend(attendanceRecords), [attendanceRecords, getWeeklyTrend]);
+  const monthlyAttendanceData = useMemo(() => getMonthlySummary ? getMonthlySummary() : [], [getMonthlySummary, attendanceRecords]);
+
+  const leaveByType = useMemo(() => {
+    if (!getLeaveByType) return {};
+    return getLeaveByType();
+  }, [getLeaveByType, leaveRecords]);
+
+  const leaveDistribution = useMemo(() => {
+    return Object.entries(leaveByType)
+      .map(([type, stats]) => ({
+        label: type.replace(' Leave', ''),
+        value: stats.total,
+        color: LEAVE_COLORS[type] || '#6b7280',
+      }))
+      .filter(d => d.value > 0);
+  }, [leaveByType]);
+
+  const departmentPayroll = useMemo(() => {
+    if (!getDepartmentPayroll) return {};
+    return getDepartmentPayroll();
+  }, [getDepartmentPayroll, payrollRecords]);
+
+  const payrollDistribution = useMemo(() => {
+    const colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#a855f7', '#06b6d4', '#8b5cf6', '#f97316'];
+    return Object.entries(departmentPayroll)
+      .map(([dept, data], i) => ({
+        label: dept,
+        value: data.total,
+        color: colors[i % colors.length],
+      }))
+      .filter(d => d.value > 0);
+  }, [departmentPayroll]);
 
   const filteredEmployees = useMemo(() => {
     let filtered = [...allEmployees];
     if (selectedDept !== 'All') {
       filtered = filtered.filter((e) => e.department === selectedDept);
     }
+    if (selectedEmployee !== 'All') {
+      filtered = filtered.filter((e) => e.id === selectedEmployee);
+    }
     if (selectedMonth !== null && selectedMonth !== undefined) {
       const monthStr = String(selectedMonth + 1).padStart(2, '0');
-      filtered = filtered.filter((e) => {
-        return e.joinDate && e.joinDate.includes(`-${monthStr}-`);
-      });
+      filtered = filtered.filter((e) => e.joinDate && e.joinDate.includes(`-${monthStr}-`));
+    }
+    if (dateRangeStart) {
+      filtered = filtered.filter((e) => e.joinDate && e.joinDate >= dateRangeStart);
+    }
+    if (dateRangeEnd) {
+      filtered = filtered.filter((e) => e.joinDate && e.joinDate <= dateRangeEnd);
+    }
+    if (selectedStatus !== 'All' && ['Active', 'Inactive', 'On Leave'].includes(selectedStatus)) {
+      filtered = filtered.filter((e) => e.status === selectedStatus);
     }
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
@@ -236,30 +273,37 @@ export default function AdminReports() {
       });
     }
     return filtered;
-  }, [selectedDept, selectedMonth, searchQuery, sortConfig]);
+  }, [selectedDept, selectedEmployee, selectedMonth, selectedStatus, dateRangeStart, dateRangeEnd, searchQuery, sortConfig, allEmployees]);
 
-  const filteredPayroll = useMemo(() => {
-    let filtered = [...payrollRecords];
+  const filteredAttendance = useMemo(() => {
+    let filtered = [...attendanceRecords];
     if (selectedDept !== 'All') {
-      filtered = filtered.filter((r) => {
-        return r.department === selectedDept;
-      });
+      const deptEmpIds = allEmployees.filter(e => e.department === selectedDept).map(e => e.id);
+      filtered = filtered.filter(r => deptEmpIds.includes(r.employeeId));
+    }
+    if (selectedEmployee !== 'All') {
+      filtered = filtered.filter(r => r.employeeId === selectedEmployee);
+    }
+    if (dateRangeStart) {
+      filtered = filtered.filter(r => r.date >= dateRangeStart);
+    }
+    if (dateRangeEnd) {
+      filtered = filtered.filter(r => r.date <= dateRangeEnd);
     }
     if (selectedMonth !== null && selectedMonth !== undefined) {
-      const monthName = MONTHS[selectedMonth];
-      filtered = filtered.filter((r) => r.period && r.period.includes(monthName));
+      const monthStr = String(selectedMonth + 1).padStart(2, '0');
+      filtered = filtered.filter(r => r.date && r.date.includes(`-${monthStr}-`));
     }
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
-      filtered = filtered.filter((r) => {
-        const emp = allEmployees.find((e) => e.id === r.employeeId);
-        return (emp?.name || r.employeeName || '').toLowerCase().includes(q) ||
-               (emp?.email || '').toLowerCase().includes(q) ||
-               (r.department || '').toLowerCase().includes(q);
-      });
+      filtered = filtered.filter(r =>
+        (r.employeeName || '').toLowerCase().includes(q) ||
+        (r.department || '').toLowerCase().includes(q) ||
+        (r.status || '').toLowerCase().includes(q)
+      );
     }
-    return filtered.slice(0, 100);
-  }, [selectedDept, selectedMonth, searchQuery, payrollRecords]);
+    return filtered.slice(0, 200);
+  }, [selectedDept, selectedEmployee, selectedMonth, dateRangeStart, dateRangeEnd, searchQuery, attendanceRecords, allEmployees]);
 
   const filteredLeaves = useMemo(() => {
     let filtered = [...leaveRecords];
@@ -269,28 +313,105 @@ export default function AdminReports() {
         return emp?.department === selectedDept || l.department === selectedDept;
       });
     }
+    if (selectedEmployee !== 'All') {
+      filtered = filtered.filter(l => l.employeeId === selectedEmployee);
+    }
+    if (dateRangeStart) {
+      filtered = filtered.filter(l => l.startDate && l.startDate >= dateRangeStart);
+    }
+    if (dateRangeEnd) {
+      filtered = filtered.filter(l => l.endDate && l.endDate <= dateRangeEnd);
+    }
     if (selectedMonth !== null && selectedMonth !== undefined) {
       const monthStr = String(selectedMonth + 1).padStart(2, '0');
-      filtered = filtered.filter((l) => {
-        return l.startDate && l.startDate.includes(`-${monthStr}-`);
-      });
+      filtered = filtered.filter(l => l.startDate && l.startDate.includes(`-${monthStr}-`));
+    }
+    if (selectedStatus !== 'All' && ['Pending', 'Approved', 'Rejected'].includes(selectedStatus)) {
+      filtered = filtered.filter(l => l.status === selectedStatus);
     }
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
-      filtered = filtered.filter((l) =>
-        l.employeeName.toLowerCase().includes(q) ||
+      filtered = filtered.filter(l =>
+        (l.employeeName || '').toLowerCase().includes(q) ||
         (l.leaveType || '').toLowerCase().includes(q) ||
         (l.reason || '').toLowerCase().includes(q) ||
         (l.department || '').toLowerCase().includes(q)
       );
     }
-    return filtered.slice(0, 100);
-  }, [selectedDept, selectedMonth, searchQuery, leaveRecords]);
+    return filtered.slice(0, 200);
+  }, [selectedDept, selectedEmployee, selectedMonth, selectedStatus, dateRangeStart, dateRangeEnd, searchQuery, leaveRecords, allEmployees]);
+
+  const filteredPayroll = useMemo(() => {
+    let filtered = [...payrollRecords];
+    if (selectedDept !== 'All') {
+      filtered = filtered.filter(r => r.department === selectedDept);
+    }
+    if (selectedEmployee !== 'All') {
+      filtered = filtered.filter(r => r.employeeId === selectedEmployee);
+    }
+    if (selectedMonth !== null && selectedMonth !== undefined) {
+      const monthStr = String(selectedMonth + 1).padStart(2, '0');
+      filtered = filtered.filter(r => {
+        if (r.period) {
+          const periodDate = new Date(r.period);
+          const periodKey = `${periodDate.getFullYear()}-${String(periodDate.getMonth() + 1).padStart(2, '0')}`;
+          return periodKey.endsWith(`-${monthStr}`);
+        }
+        return false;
+      });
+    }
+    if (selectedStatus !== 'All' && ['Paid', 'Pending'].includes(selectedStatus)) {
+      filtered = filtered.filter(r => r.status === selectedStatus);
+    }
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase();
+      filtered = filtered.filter(r => {
+        const emp = allEmployees.find((e) => e.id === r.employeeId);
+        return (emp?.name || r.employeeName || '').toLowerCase().includes(q) ||
+               (emp?.email || '').toLowerCase().includes(q) ||
+               (r.department || '').toLowerCase().includes(q);
+      });
+    }
+    return filtered.slice(0, 200);
+  }, [selectedDept, selectedEmployee, selectedMonth, selectedStatus, searchQuery, payrollRecords, allEmployees]);
+
+  const dynamicReports = useMemo(() => {
+    if (!allEmployees || allEmployees.length === 0) return [];
+    const reports = [];
+    let id = 1;
+    const today = toLocalDateStr(new Date());
+
+    reports.push({ id: id++, name: 'Monthly Employee Summary', category: 'Employee', department: 'All', generatedDate: today, generatedBy: 'System', status: 'Completed' });
+    reports.push({ id: id++, name: 'Employee Onboarding Status', category: 'Employee', department: 'HR', generatedDate: today, generatedBy: 'System', status: 'Completed' });
+
+    if (attendanceRecords && attendanceRecords.length > 0) {
+      reports.push({ id: id++, name: 'Weekly Attendance Log', category: 'Attendance', department: 'All', generatedDate: today, generatedBy: 'System', status: 'Completed' });
+      reports.push({ id: id++, name: 'Monthly Absenteeism Analysis', category: 'Attendance', department: 'All', generatedDate: today, generatedBy: 'System', status: 'Completed' });
+    }
+
+    if (payrollRecords && payrollRecords.length > 0) {
+      reports.push({ id: id++, name: 'Payroll Breakdown', category: 'Payroll', department: 'Finance', generatedDate: today, generatedBy: 'System', status: 'Completed' });
+      reports.push({ id: id++, name: 'Salary Revision Tracker', category: 'Payroll', department: 'HR', generatedDate: today, generatedBy: 'System', status: 'Completed' });
+    }
+
+    if (leaveRecords && leaveRecords.length > 0) {
+      const pendingLeaves = leaveRecords.filter(l => l.status === 'Pending').length;
+      reports.push({ id: id++, name: 'Leave Utilization Report', category: 'Leave', department: 'HR', generatedDate: today, generatedBy: 'System', status: pendingLeaves > 0 ? 'Pending' : 'Completed' });
+      reports.push({ id: id++, name: 'Leave Balance Report', category: 'Leave', department: 'All', generatedDate: today, generatedBy: 'System', status: 'Completed' });
+    }
+
+    if (departments && departments.length > 0) {
+      reports.push({ id: id++, name: 'Department Headcount', category: 'Department', department: 'All', generatedDate: today, generatedBy: 'System', status: 'Completed' });
+      reports.push({ id: id++, name: 'Team Performance Overview', category: 'Department', department: 'All', generatedDate: today, generatedBy: 'System', status: 'Completed' });
+    }
+
+    return reports;
+  }, [allEmployees, attendanceRecords, payrollRecords, leaveRecords, departments]);
 
   const filteredReports = useMemo(() => {
-    let filtered = [...MOCK_REPORTS];
+    let filtered = [...dynamicReports];
     if (selectedDept !== 'All') {
-      filtered = filtered.filter((r) => r.department === selectedDept);
+      filtered = filtered.filter((r) => r.department === selectedDept || r.department === 'All');
     }
     if (selectedReportType !== 'All') {
       filtered = filtered.filter((r) => r.category === selectedReportType);
@@ -298,20 +419,12 @@ export default function AdminReports() {
     if (selectedStatus !== 'All') {
       filtered = filtered.filter((r) => r.status === selectedStatus);
     }
-    if (selectedMonth !== null && selectedMonth !== undefined) {
-      const monthStr = String(selectedMonth + 1).padStart(2, '0');
-      filtered = filtered.filter((r) => {
-        const parts = r.generatedDate.split('-');
-        return parts[1] === monthStr && parts[0] === String(selectedYear);
-      });
-    }
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
       filtered = filtered.filter(
         (r) =>
           r.name.toLowerCase().includes(q) ||
           r.department.toLowerCase().includes(q) ||
-          r.generatedBy.toLowerCase().includes(q) ||
           r.category.toLowerCase().includes(q)
       );
     }
@@ -324,7 +437,7 @@ export default function AdminReports() {
       });
     }
     return filtered;
-  }, [selectedDept, selectedReportType, selectedStatus, selectedMonth, selectedYear, searchQuery, sortConfig]);
+  }, [dynamicReports, selectedDept, selectedReportType, selectedStatus, searchQuery, sortConfig]);
 
   const handleSort = (key) => {
     setSortConfig((prev) => ({
@@ -335,18 +448,14 @@ export default function AdminReports() {
 
   const SortIcon = ({ column }) => {
     if (sortConfig.key !== column) return <ChevronDown size={14} style={{ opacity: 0.3 }} />;
-    return sortConfig.direction === 'asc' ? (
-      <ChevronUp size={14} />
-    ) : (
-      <ChevronDown size={14} />
-    );
+    return sortConfig.direction === 'asc' ? <ChevronUp size={14} /> : <ChevronDown size={14} />;
   };
 
   const exportToCSV = (data, filename) => {
     if (!data.length) return;
     const headers = Object.keys(data[0]).join(',');
-    const rows = data.map((row) => Object.values(row).join(',')).join('\n');
-    const blob = new Blob([headers + '\n' + rows], { type: 'text/csv' });
+    const rows = data.map((row) => Object.values(row).map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n');
+    const blob = new Blob([headers + '\n' + rows], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -355,91 +464,97 @@ export default function AdminReports() {
     URL.revokeObjectURL(url);
   };
 
-  const handleExportCSV = () => {
-    setExporting(true);
-    setTimeout(() => {
-      let data = [];
-      let filename = '';
+  const exportToExcel = (data, filename) => {
+    if (!data.length) return;
+    const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Report');
+    XLSX.writeFile(wb, `${filename}.xlsx`);
+  };
 
-      switch (activeReport) {
-        case 'employee':
-          data = filteredEmployees.map((e) => ({
-            Name: e.name,
-            Email: e.email,
-            Department: e.department,
-            Position: e.position,
-            Status: e.status,
-            'Join Date': e.joinDate,
-          }));
-          filename = 'employee-report';
-          break;
-        case 'attendance':
-          data = weeklyAttendance.map((w) => ({
-            Day: w.day,
-            Present: w.present,
-            Absent: w.absent,
-            Late: w.late,
-            WFH: Math.floor(w.present * 0.12),
-            'Work Hours': w.workHours,
-          }));
-          filename = 'attendance-report';
-          break;
-        case 'leave':
-          data = filteredLeaves.map((l) => ({
-            Employee: l.employeeName,
-            Type: l.leaveType,
-            'Start Date': l.startDate,
-            'End Date': l.endDate,
-            Duration: l.duration,
-            Status: l.status,
-            Reason: l.reason,
-          }));
-          filename = 'leave-report';
-          break;
-        case 'payroll':
-          data = filteredPayroll.map((r) => ({
+  const getExportData = useCallback(() => {
+    switch (activeReport) {
+      case 'employee':
+        return {
+          data: filteredEmployees.map((e) => ({
+            Name: e.name, Email: e.email, Department: e.department,
+            Position: e.position, Status: e.status, 'Join Date': e.joinDate,
+          })),
+          filename: 'employee-report',
+        };
+      case 'attendance':
+        return {
+          data: filteredAttendance.map((r) => ({
+            Employee: r.employeeName, Date: r.date, Status: r.status,
+            'Check In': r.checkIn || 'N/A', 'Check Out': r.checkOut || 'N/A',
+            'Hours Worked': r.hoursWorked || 0, Department: r.department,
+          })),
+          filename: 'attendance-report',
+        };
+      case 'leave':
+        return {
+          data: filteredLeaves.map((l) => ({
+            Employee: l.employeeName, Type: l.leaveType, 'Start Date': l.startDate,
+            'End Date': l.endDate, Duration: l.duration, Status: l.status, Reason: l.reason,
+          })),
+          filename: 'leave-report',
+        };
+      case 'payroll':
+        return {
+          data: filteredPayroll.map((r) => ({
             Employee: r.employeeName || allEmployees.find((e) => e.id === r.employeeId)?.name || 'Unknown',
-            Period: r.period,
-            'Base Salary': `${settings.payroll.currencySymbol}${r.baseSalary.toLocaleString()}`,
-            Bonus: `${settings.payroll.currencySymbol}${r.bonus.toLocaleString()}`,
-            Deductions: `${settings.payroll.currencySymbol}${r.totalDeductions.toLocaleString()}`,
-            'Net Salary': `${settings.payroll.currencySymbol}${r.netSalary.toLocaleString()}`,
-            Status: r.status,
-          }));
-          filename = 'payroll-report';
-          break;
-        case 'department':
-          data = departments.map((dept) => {
+            Period: r.period, Department: r.department,
+            'Base Salary': r.baseSalary, Bonus: r.bonus,
+            Deductions: r.totalDeductions, 'Net Salary': r.netSalary, Status: r.status,
+          })),
+          filename: 'payroll-report',
+        };
+      case 'department':
+        return {
+          data: departments.map((dept) => {
             const deptEmps = allEmployees.filter((e) => e.department === dept.name);
             return {
-              Department: dept.name,
-              Head: dept.head,
+              Department: dept.name, Head: dept.head,
               'Total Employees': deptEmps.length,
               Active: deptEmps.filter((e) => e.status === 'Active').length,
               'On Leave': deptEmps.filter((e) => e.status === 'On Leave').length,
               Inactive: deptEmps.filter((e) => e.status === 'Inactive').length,
-              Budget: dept.budget,
             };
-          });
-          filename = 'department-report';
-          break;
-        default:
-          data = filteredReports.map((r) => ({
-            'Report Name': r.name,
-            Category: r.category,
-            Department: r.department,
-            'Generated Date': r.generatedDate,
-            'Generated By': r.generatedBy,
+          }),
+          filename: 'department-report',
+        };
+      default:
+        return {
+          data: filteredReports.map((r) => ({
+            'Report Name': r.name, Category: r.category,
+            Department: r.department, 'Generated Date': r.generatedDate,
             Status: r.status,
-          }));
-          filename = 'all-reports';
-      }
+          })),
+          filename: 'all-reports',
+        };
+    }
+  }, [activeReport, filteredEmployees, filteredAttendance, filteredLeaves, filteredPayroll, departments, allEmployees, filteredReports]);
 
+  const handleExportCSV = () => {
+    setExporting(true);
+    setTimeout(() => {
+      const { data, filename } = getExportData();
       if (data.length > 0) {
         exportToCSV(data, `${filename}-${MONTHS[selectedMonth]}-${selectedYear}`);
       }
       setExporting(false);
-    }, 500);
+    }, 300);
+  };
+
+  const handleExportExcel = () => {
+    setExporting(true);
+    setTimeout(() => {
+      const { data, filename } = getExportData();
+      if (data.length > 0) {
+        exportToExcel(data, `${filename}-${MONTHS[selectedMonth]}-${selectedYear}`);
+      }
+      setExporting(false);
+    }, 300);
   };
 
   const handleExportPDF = () => {
@@ -458,9 +573,9 @@ export default function AdminReports() {
         ).join('');
         break;
       case 'attendance':
-        tableHeaders = '<tr><th>Day</th><th>Present</th><th>Absent</th><th>Late</th><th>WFH</th><th>Work Hours</th></tr>';
-        tableRows = weeklyAttendance.map((w) =>
-          `<tr><td>${w.day}</td><td>${w.present}</td><td>${w.absent}</td><td>${w.late}</td><td>${Math.floor(w.present * 0.12)}</td><td>${w.workHours}</td></tr>`
+        tableHeaders = '<tr><th>Employee</th><th>Date</th><th>Status</th><th>Check In</th><th>Check Out</th><th>Hours</th></tr>';
+        tableRows = filteredAttendance.map((r) =>
+          `<tr><td>${r.employeeName}</td><td>${r.date}</td><td>${r.status}</td><td>${r.checkIn || 'N/A'}</td><td>${r.checkOut || 'N/A'}</td><td>${r.hoursWorked || 0}</td></tr>`
         ).join('');
         break;
       case 'leave':
@@ -470,23 +585,23 @@ export default function AdminReports() {
         ).join('');
         break;
       case 'payroll':
-        tableHeaders = '<tr><th>Employee</th><th>Period</th><th>Base Salary</th><th>Bonus</th><th>Deductions</th><th>Net Salary</th><th>Status</th></tr>';
+        tableHeaders = '<tr><th>Employee</th><th>Period</th><th>Base Pay</th><th>Bonus</th><th>Deductions</th><th>Net Pay</th><th>Status</th></tr>';
         tableRows = filteredPayroll.map((r) => {
           const empName = r.employeeName || allEmployees.find((e) => e.id === r.employeeId)?.name || 'Unknown';
-          return `<tr><td>${empName}</td><td>${r.period}</td><td>${settings.payroll.currencySymbol}${r.baseSalary.toLocaleString()}</td><td>${settings.payroll.currencySymbol}${r.bonus.toLocaleString()}</td><td>${settings.payroll.currencySymbol}${r.totalDeductions.toLocaleString()}</td><td>${settings.payroll.currencySymbol}${r.netSalary.toLocaleString()}</td><td>${r.status}</td></tr>`;
+          return `<tr><td>${empName}</td><td>${r.period}</td><td>$${(r.baseSalary || 0).toLocaleString()}</td><td>$${(r.bonus || 0).toLocaleString()}</td><td>$${(r.totalDeductions || 0).toLocaleString()}</td><td>$${(r.netSalary || 0).toLocaleString()}</td><td>${r.status}</td></tr>`;
         }).join('');
         break;
       case 'department':
-        tableHeaders = '<tr><th>Department</th><th>Head</th><th>Total</th><th>Active</th><th>On Leave</th><th>Inactive</th><th>Budget</th></tr>';
+        tableHeaders = '<tr><th>Department</th><th>Head</th><th>Total</th><th>Active</th><th>On Leave</th><th>Inactive</th></tr>';
         tableRows = departments.map((dept) => {
           const deptEmps = allEmployees.filter((e) => e.department === dept.name);
-          return `<tr><td>${dept.name}</td><td>${dept.head}</td><td>${deptEmps.length}</td><td>${deptEmps.filter((e) => e.status === 'Active').length}</td><td>${deptEmps.filter((e) => e.status === 'On Leave').length}</td><td>${deptEmps.filter((e) => e.status === 'Inactive').length}</td><td>$${dept.budget.toLocaleString()}</td></tr>`;
+          return `<tr><td>${dept.name}</td><td>${dept.head}</td><td>${deptEmps.length}</td><td>${deptEmps.filter((e) => e.status === 'Active').length}</td><td>${deptEmps.filter((e) => e.status === 'On Leave').length}</td><td>${deptEmps.filter((e) => e.status === 'Inactive').length}</td></tr>`;
         }).join('');
         break;
       default:
-        tableHeaders = '<tr><th>Report Name</th><th>Category</th><th>Department</th><th>Generated Date</th><th>Generated By</th><th>Status</th></tr>';
+        tableHeaders = '<tr><th>Report Name</th><th>Category</th><th>Department</th><th>Generated Date</th><th>Status</th></tr>';
         tableRows = filteredReports.map((r) =>
-          `<tr><td>${r.name}</td><td>${r.category}</td><td>${r.department}</td><td>${r.generatedDate}</td><td>${r.generatedBy}</td><td>${r.status}</td></tr>`
+          `<tr><td>${r.name}</td><td>${r.category}</td><td>${r.department}</td><td>${r.generatedDate}</td><td>${r.status}</td></tr>`
         ).join('');
     }
 
@@ -504,17 +619,13 @@ export default function AdminReports() {
           th { background: #f1f5f9; text-align: left; padding: 10px 12px; font-weight: 700; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; border-bottom: 2px solid #e2e8f0; }
           td { padding: 10px 12px; border-bottom: 1px solid #e2e8f0; }
           tr:hover { background: #f8fafc; }
-          .badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 0.7rem; font-weight: 600; }
-          .badge-approved { background: #dcfce7; color: #16a34a; }
-          .badge-pending { background: #fef3c7; color: #d97706; }
-          .badge-rejected { background: #fee2e2; color: #dc2626; }
           @media print { body { padding: 20px; } }
         </style>
       </head>
       <body>
         <h1>${settings.company.name}</h1>
         <div class="subtitle">${reportTitle} Report</div>
-        <div class="meta">Generated on ${new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })} | ${MONTHS[selectedMonth]} ${selectedYear} | ${selectedDept === 'All' ? 'All Departments' : selectedDept} | ${settings.company.email}</div>
+        <div class="meta">Generated on ${new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })} | ${MONTHS[selectedMonth]} ${selectedYear} | ${selectedDept === 'All' ? 'All Departments' : selectedDept}</div>
         <table>
           <thead>${tableHeaders}</thead>
           <tbody>${tableRows}</tbody>
@@ -527,21 +638,20 @@ export default function AdminReports() {
     setTimeout(() => printWindow.print(), 500);
   };
 
-  const handlePrint = () => {
-    window.print();
-  };
+  const handlePrint = () => window.print();
 
-  const handleView = (report) => {
-    setViewReportData(report);
-  };
+  const handleView = (report) => setViewReportData(report);
 
   const handleResetFilters = () => {
     setSelectedDept('All');
+    setSelectedEmployee('All');
     setSelectedReportType('All');
     setSelectedStatus('All');
     setSearchQuery('');
     setSelectedMonth(new Date().getMonth());
-    setSelectedYear(2026);
+    setSelectedYear(new Date().getFullYear());
+    setDateRangeStart('');
+    setDateRangeEnd('');
   };
 
   if (!allEmployees || allEmployees.length === 0) {
@@ -549,26 +659,64 @@ export default function AdminReports() {
       <div className="admin-reports" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '60vh' }}>
         <div style={{ textAlign: 'center' }}>
           <div className="loader-spinner" style={{ width: 40, height: 40, border: '4px solid var(--border-color)', borderTopColor: 'var(--primary)', borderRadius: '50%', animation: 'spin 0.8s linear infinite', margin: '0 auto 12px' }} />
-          <p style={{ color: 'var(--text-secondary)', fontSize: '0.88rem' }}>Loading reports...</p>
+          <p style={{ color: 'var(--text-secondary)', fontSize: '0.88rem' }}>Loading reports from MongoDB...</p>
         </div>
       </div>
     );
   }
 
+  const renderCharts = () => (
+    <div className="reports-charts-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 16, marginBottom: 20 }}>
+      <ChartCard title="Employee Growth" subtitle="Headcount over last 6 months">
+        <LineChart
+          labels={employeeGrowth.map(d => d.month)}
+          datasets={[{ data: employeeGrowth.map(d => d.count), color: '#3b82f6', label: 'Employees' }]}
+          height={180}
+        />
+      </ChartCard>
+
+      <ChartCard title="Attendance Trend" subtitle="Monthly attendance summary">
+        <BarChart
+          labels={monthlyAttendanceData.map(d => d.month)}
+          datasets={[
+            { data: monthlyAttendanceData.map(d => d.present), color: '#22c55e', label: 'Present' },
+            { data: monthlyAttendanceData.map(d => d.absent), color: '#ef4444', label: 'Absent' },
+            { data: monthlyAttendanceData.map(d => d.late), color: '#f59e0b', label: 'Late' },
+          ]}
+          height={180}
+        />
+      </ChartCard>
+
+      {leaveDistribution.length > 0 && (
+        <ChartCard title="Leave Distribution" subtitle="Leave requests by type">
+          <DonutChart data={leaveDistribution} size={160} />
+        </ChartCard>
+      )}
+
+      {payrollDistribution.length > 0 && (
+        <ChartCard title="Payroll Distribution" subtitle="Salary by department">
+          <DonutChart data={payrollDistribution} size={160} />
+        </ChartCard>
+      )}
+    </div>
+  );
+
   const renderOverview = () => (
     <div className="reports-overview">
+      {renderCharts()}
+
       <div className="reports-table-section">
         <div className="reports-table-header">
           <h3><FileText size={18} style={{ display: 'inline', verticalAlign: 'middle', marginRight: 8 }} /> All Reports ({filteredReports.length})</h3>
           <div style={{ display: 'flex', gap: 8 }}>
             <button className="reports-export-btn" onClick={handleExportCSV} disabled={exporting}>
-              <FileSpreadsheet size={14} /> Export CSV
+              <FileSpreadsheet size={14} /> CSV
+            </button>
+            <button className="reports-export-btn" onClick={handleExportExcel} disabled={exporting}>
+              <File size={14} /> Excel
             </button>
             <button className="reports-export-btn" onClick={handleExportPDF}>
-              <File size={14} /> Export PDF
-            </button>
-            <button className="reports-export-btn" onClick={handlePrint}>
-              <Printer size={14} /> Print
+              <Download size={14} /> PDF
             </button>
           </div>
         </div>
@@ -576,24 +724,11 @@ export default function AdminReports() {
           <table className="reports-data-table">
             <thead>
               <tr>
-                <th onClick={() => handleSort('name')}>
-                  <span>Report Name <SortIcon column="name" /></span>
-                </th>
-                <th onClick={() => handleSort('category')}>
-                  <span>Category <SortIcon column="category" /></span>
-                </th>
-                <th onClick={() => handleSort('department')}>
-                  <span>Department <SortIcon column="department" /></span>
-                </th>
-                <th onClick={() => handleSort('generatedDate')}>
-                  <span>Generated Date <SortIcon column="generatedDate" /></span>
-                </th>
-                <th onClick={() => handleSort('generatedBy')}>
-                  <span>Generated By <SortIcon column="generatedBy" /></span>
-                </th>
-                <th onClick={() => handleSort('status')}>
-                  <span>Status <SortIcon column="status" /></span>
-                </th>
+                <th onClick={() => handleSort('name')}><span>Report Name <SortIcon column="name" /></span></th>
+                <th onClick={() => handleSort('category')}><span>Category <SortIcon column="category" /></span></th>
+                <th onClick={() => handleSort('department')}><span>Department <SortIcon column="department" /></span></th>
+                <th onClick={() => handleSort('generatedDate')}><span>Generated <SortIcon column="generatedDate" /></span></th>
+                <th onClick={() => handleSort('status')}><span>Status <SortIcon column="status" /></span></th>
                 <th>Actions</th>
               </tr>
             </thead>
@@ -604,7 +739,6 @@ export default function AdminReports() {
                   <td><span className="reports-dept-badge">{report.category}</span></td>
                   <td>{report.department}</td>
                   <td>{report.generatedDate}</td>
-                  <td>{report.generatedBy}</td>
                   <td>
                     <span className={`reports-status-badge reports-status-${report.status === 'Completed' ? 'approved' : report.status === 'Pending' ? 'pending' : 'active'}`}>
                       {report.status}
@@ -612,25 +746,8 @@ export default function AdminReports() {
                   </td>
                   <td>
                     <div style={{ display: 'flex', gap: 6 }}>
-                      <button
-                        onClick={() => handleView(report)}
-                        style={{
-                          display: 'inline-flex', alignItems: 'center', gap: 4, padding: '4px 10px',
-                          borderRadius: 6, border: '1px solid var(--border-color)', background: 'var(--glass-bg)',
-                          color: 'var(--text-primary)', fontSize: '0.72rem', fontWeight: 600, cursor: 'pointer',
-                        }}
-                      >
+                      <button onClick={() => handleView(report)} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '4px 10px', borderRadius: 6, border: '1px solid var(--border-color)', background: 'var(--glass-bg)', color: 'var(--text-primary)', fontSize: '0.72rem', fontWeight: 600, cursor: 'pointer' }}>
                         <Eye size={12} /> View
-                      </button>
-                      <button
-                        onClick={handleExportCSV}
-                        style={{
-                          display: 'inline-flex', alignItems: 'center', gap: 4, padding: '4px 10px',
-                          borderRadius: 6, border: '1px solid var(--border-color)', background: 'var(--glass-bg)',
-                          color: 'var(--text-primary)', fontSize: '0.72rem', fontWeight: 600, cursor: 'pointer',
-                        }}
-                      >
-                        <Download size={12} /> CSV
                       </button>
                     </div>
                   </td>
@@ -667,51 +784,23 @@ export default function AdminReports() {
       </div>
 
       <div className="reports-summary-cards">
-        <div className="reports-summary-card">
-          <div className="reports-summary-icon" style={{ background: 'rgba(99,102,241,0.1)', color: '#6366f1' }}>
-            <CheckCircle size={22} />
+        {[
+          { label: 'Total Employees', value: stats.totalEmp, icon: Users, color: '#6366f1', bg: 'rgba(99,102,241,0.1)' },
+          { label: 'Present Today', value: stats.presentToday, icon: CheckCircle, color: '#22c55e', bg: 'rgba(34,197,94,0.1)' },
+          { label: 'On Leave', value: stats.onLeaveToday, icon: Calendar, color: '#f59e0b', bg: 'rgba(245,158,11,0.1)' },
+          { label: 'Total Payroll', value: `$${(stats.totalPayrollAmount / 1000).toFixed(0)}k`, icon: Wallet, color: '#8b5cf6', bg: 'rgba(139,92,246,0.1)' },
+          { label: 'Attendance Rate', value: `${stats.attendanceRate}%`, icon: Target, color: '#06b6d4', bg: 'rgba(6,182,212,0.1)' },
+        ].map((card, i) => (
+          <div key={i} className="reports-summary-card">
+            <div className="reports-summary-icon" style={{ background: card.bg, color: card.color }}>
+              <card.icon size={22} />
+            </div>
+            <div className="reports-summary-info">
+              <span className="reports-summary-value">{card.value}</span>
+              <span className="reports-summary-label">{card.label}</span>
+            </div>
           </div>
-          <div className="reports-summary-info">
-            <span className="reports-summary-value">{stats.totalEmp}</span>
-            <span className="reports-summary-label">Total Employees</span>
-          </div>
-        </div>
-        <div className="reports-summary-card">
-          <div className="reports-summary-icon" style={{ background: 'rgba(34,197,94,0.1)', color: '#22c55e' }}>
-            <CheckCircle size={22} />
-          </div>
-          <div className="reports-summary-info">
-            <span className="reports-summary-value">{stats.presentToday}</span>
-            <span className="reports-summary-label">Present Today</span>
-          </div>
-        </div>
-        <div className="reports-summary-card">
-          <div className="reports-summary-icon" style={{ background: 'rgba(245,158,11,0.1)', color: '#f59e0b' }}>
-            <Calendar size={22} />
-          </div>
-          <div className="reports-summary-info">
-            <span className="reports-summary-value">{stats.onLeaveToday}</span>
-            <span className="reports-summary-label">On Leave</span>
-          </div>
-        </div>
-        <div className="reports-summary-card">
-          <div className="reports-summary-icon" style={{ background: 'rgba(139,92,246,0.1)', color: '#8b5cf6' }}>
-            <Wallet size={22} />
-          </div>
-          <div className="reports-summary-info">
-            <span className="reports-summary-value">${(stats.totalPayrollAmount / 1000000).toFixed(1)}M</span>
-            <span className="reports-summary-label">Total Payroll</span>
-          </div>
-        </div>
-        <div className="reports-summary-card">
-          <div className="reports-summary-icon" style={{ background: 'rgba(6,182,212,0.1)', color: '#06b6d4' }}>
-            <Target size={22} />
-          </div>
-          <div className="reports-summary-info">
-            <span className="reports-summary-value">{stats.attendanceRate}%</span>
-            <span className="reports-summary-label">Attendance Rate</span>
-          </div>
-        </div>
+        ))}
       </div>
     </div>
   );
@@ -719,12 +808,23 @@ export default function AdminReports() {
   const renderEmployeeReport = () => (
     <div className="reports-table-section">
       <div className="reports-table-header">
-        <h3>Employee Directory ({filteredEmployees.length} employees)</h3>
-        <button className="reports-export-btn" onClick={handleExportCSV} disabled={exporting}>
-          <Download size={16} /> Export CSV
-        </button>
+        <h3><Users size={18} style={{ display: 'inline', verticalAlign: 'middle', marginRight: 8 }} /> Employee Directory ({filteredEmployees.length} employees)</h3>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button className="reports-export-btn" onClick={handleExportCSV} disabled={exporting}><FileSpreadsheet size={14} /> CSV</button>
+          <button className="reports-export-btn" onClick={handleExportExcel} disabled={exporting}><File size={14} /> Excel</button>
+          <button className="reports-export-btn" onClick={handleExportPDF}><Download size={14} /> PDF</button>
+        </div>
       </div>
-      <div className="reports-table-wrapper">
+
+      <ChartCard title="Employee Growth" subtitle="Headcount trend over 6 months">
+        <LineChart
+          labels={employeeGrowth.map(d => d.month)}
+          datasets={[{ data: employeeGrowth.map(d => d.count), color: '#3b82f6', label: 'Employees' }]}
+          height={180}
+        />
+      </ChartCard>
+
+      <div className="reports-table-wrapper" style={{ marginTop: 16 }}>
         <table className="reports-data-table">
           <thead>
             <tr>
@@ -750,11 +850,7 @@ export default function AdminReports() {
                 <td>{emp.email}</td>
                 <td><span className="reports-dept-badge">{emp.department}</span></td>
                 <td>{emp.position}</td>
-                <td>
-                  <span className={`reports-status-badge reports-status-${emp.status}`}>
-                    {emp.status}
-                  </span>
-                </td>
+                <td><span className={`reports-status-badge reports-status-${emp.status}`}>{emp.status}</span></td>
                 <td>{emp.joinDate}</td>
               </tr>
             ))}
@@ -767,68 +863,69 @@ export default function AdminReports() {
   const renderAttendanceReport = () => (
     <div className="reports-table-section">
       <div className="reports-table-header">
-        <h3>Weekly Attendance Report</h3>
-        <button className="reports-export-btn" onClick={handleExportCSV} disabled={exporting}>
-          <Download size={16} /> Export CSV
-        </button>
+        <h3><Calendar size={18} style={{ display: 'inline', verticalAlign: 'middle', marginRight: 8 }} /> Attendance Report ({filteredAttendance.length} records)</h3>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button className="reports-export-btn" onClick={handleExportCSV} disabled={exporting}><FileSpreadsheet size={14} /> CSV</button>
+          <button className="reports-export-btn" onClick={handleExportExcel} disabled={exporting}><File size={14} /> Excel</button>
+          <button className="reports-export-btn" onClick={handleExportPDF}><Download size={14} /> PDF</button>
+        </div>
       </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 16, marginBottom: 16 }}>
+        <ChartCard title="Attendance Trend" subtitle="Monthly attendance overview">
+          <BarChart
+            labels={monthlyAttendanceData.map(d => d.month)}
+            datasets={[
+              { data: monthlyAttendanceData.map(d => d.present), color: '#22c55e', label: 'Present' },
+              { data: monthlyAttendanceData.map(d => d.absent), color: '#ef4444', label: 'Absent' },
+              { data: monthlyAttendanceData.map(d => d.late), color: '#f59e0b', label: 'Late' },
+            ]}
+            height={180}
+          />
+        </ChartCard>
+
+        <ChartCard title="Weekly Breakdown" subtitle="This week's attendance">
+          <BarChart
+            labels={weeklyAttendanceData.map(d => d.day)}
+            datasets={[
+              { data: weeklyAttendanceData.map(d => d.present), color: '#22c55e', label: 'Present' },
+              { data: weeklyAttendanceData.map(d => d.absent), color: '#ef4444', label: 'Absent' },
+              { data: weeklyAttendanceData.map(d => d.late), color: '#f59e0b', label: 'Late' },
+            ]}
+            height={180}
+          />
+        </ChartCard>
+      </div>
+
       <div className="reports-table-wrapper">
         <table className="reports-data-table">
           <thead>
             <tr>
-              <th>Week</th>
-              <th>Present</th>
-              <th>Absent</th>
-              <th>Late</th>
-              <th>WFH</th>
-              <th>Attendance Rate</th>
+              <th>Employee</th><th>Date</th><th>Status</th><th>Check In</th><th>Check Out</th><th>Hours</th><th>Department</th>
             </tr>
           </thead>
           <tbody>
-            {weeklyAttendance.map((w, i) => {
-              const wfh = Math.floor(w.present * 0.12);
-              const total = w.present + w.absent + w.late + wfh;
-              const rate = total > 0 ? Math.round((w.present / total) * 100) : 0;
-              return (
-                <tr key={i}>
-                  <td><strong>{w.day}</strong></td>
-                  <td><span className="reports-att-present">{w.present}</span></td>
-                  <td><span className="reports-att-absent">{w.absent}</span></td>
-                  <td><span className="reports-att-late">{w.late}</span></td>
-                  <td><span className="reports-att-wfh">{wfh}</span></td>
-                  <td>
-                    <div className="reports-progress-bar">
-                      <div className="reports-progress-fill" style={{ width: `${rate}%`, background: rate >= 80 ? '#22c55e' : rate >= 60 ? '#f59e0b' : '#ef4444' }} />
-                      <span>{rate}%</span>
-                    </div>
-                  </td>
-                </tr>
-              );
-            })}
+            {filteredAttendance.map((r) => (
+              <tr key={r.id || `${r.employeeId}-${r.date}`}>
+                <td><strong>{r.employeeName}</strong></td>
+                <td>{r.date}</td>
+                <td><span className={`reports-status-badge reports-status-${r.status === 'present' ? 'approved' : r.status === 'late' ? 'pending' : 'rejected'}`}>{r.status}</span></td>
+                <td>{r.checkIn || 'N/A'}</td>
+                <td>{r.checkOut || 'N/A'}</td>
+                <td>{r.hoursWorked || 0}h</td>
+                <td>{r.department}</td>
+              </tr>
+            ))}
           </tbody>
         </table>
       </div>
+
       <div className="reports-att-summary">
-        <div className="reports-att-stat">
-          <span className="reports-att-stat-value">{stats.presentToday}</span>
-          <span className="reports-att-stat-label">Present Today</span>
-        </div>
-        <div className="reports-att-stat">
-          <span className="reports-att-stat-value">{stats.absentToday}</span>
-          <span className="reports-att-stat-label">Absent Today</span>
-        </div>
-        <div className="reports-att-stat">
-          <span className="reports-att-stat-value">{stats.lateToday}</span>
-          <span className="reports-att-stat-label">Late Today</span>
-        </div>
-        <div className="reports-att-stat">
-          <span className="reports-att-stat-value">{stats.halfDayToday}</span>
-          <span className="reports-att-stat-label">Half Day</span>
-        </div>
-        <div className="reports-att-stat">
-          <span className="reports-att-stat-value">{stats.attendanceRate}%</span>
-          <span className="reports-att-stat-label">Today's Rate</span>
-        </div>
+        <div className="reports-att-stat"><span className="reports-att-stat-value">{stats.presentToday}</span><span className="reports-att-stat-label">Present Today</span></div>
+        <div className="reports-att-stat"><span className="reports-att-stat-value">{stats.absentToday}</span><span className="reports-att-stat-label">Absent Today</span></div>
+        <div className="reports-att-stat"><span className="reports-att-stat-value">{stats.lateToday}</span><span className="reports-att-stat-label">Late Today</span></div>
+        <div className="reports-att-stat"><span className="reports-att-stat-value">{stats.halfDayToday}</span><span className="reports-att-stat-label">Half Day</span></div>
+        <div className="reports-att-stat"><span className="reports-att-stat-value">{stats.attendanceRate}%</span><span className="reports-att-stat-label">Attendance Rate</span></div>
       </div>
     </div>
   );
@@ -836,22 +933,25 @@ export default function AdminReports() {
   const renderLeaveReport = () => (
     <div className="reports-table-section">
       <div className="reports-table-header">
-        <h3>Leave Report ({filteredLeaves.length} records)</h3>
-        <button className="reports-export-btn" onClick={handleExportCSV} disabled={exporting}>
-          <Download size={16} /> Export CSV
-        </button>
+        <h3><FileText size={18} style={{ display: 'inline', verticalAlign: 'middle', marginRight: 8 }} /> Leave Report ({filteredLeaves.length} records)</h3>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button className="reports-export-btn" onClick={handleExportCSV} disabled={exporting}><FileSpreadsheet size={14} /> CSV</button>
+          <button className="reports-export-btn" onClick={handleExportExcel} disabled={exporting}><File size={14} /> Excel</button>
+          <button className="reports-export-btn" onClick={handleExportPDF}><Download size={14} /> PDF</button>
+        </div>
       </div>
-      <div className="reports-table-wrapper">
+
+      {leaveDistribution.length > 0 && (
+        <ChartCard title="Leave Distribution" subtitle="Leave requests by type">
+          <DonutChart data={leaveDistribution} size={160} />
+        </ChartCard>
+      )}
+
+      <div className="reports-table-wrapper" style={{ marginTop: 16 }}>
         <table className="reports-data-table">
           <thead>
             <tr>
-              <th>Employee</th>
-              <th>Type</th>
-              <th>Start Date</th>
-              <th>End Date</th>
-              <th>Days</th>
-              <th>Status</th>
-              <th>Reason</th>
+              <th>Employee</th><th>Type</th><th>Start Date</th><th>End Date</th><th>Days</th><th>Status</th><th>Reason</th>
             </tr>
           </thead>
           <tbody>
@@ -862,30 +962,18 @@ export default function AdminReports() {
                 <td>{leave.startDate}</td>
                 <td>{leave.endDate}</td>
                 <td>{leave.duration}</td>
-                <td>
-                  <span className={`reports-status-badge reports-status-${leave.status}`}>
-                    {leave.status}
-                  </span>
-                </td>
+                <td><span className={`reports-status-badge reports-status-${leave.status}`}>{leave.status}</span></td>
                 <td className="reports-reason-cell">{leave.reason}</td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
+
       <div className="reports-leave-summary">
-        <div className="reports-leave-stat">
-          <span className="reports-leave-stat-value" style={{ color: '#22c55e' }}>{stats.approvedLeaves || leaveStats.approved || 0}</span>
-          <span className="reports-leave-stat-label">Approved</span>
-        </div>
-        <div className="reports-leave-stat">
-          <span className="reports-leave-stat-value" style={{ color: '#f59e0b' }}>{stats.pendingLeaves || leaveStats.pending || 0}</span>
-          <span className="reports-leave-stat-label">Pending</span>
-        </div>
-        <div className="reports-leave-stat">
-          <span className="reports-leave-stat-value" style={{ color: '#ef4444' }}>{stats.rejectedLeaves || leaveStats.rejected || 0}</span>
-          <span className="reports-leave-stat-label">Rejected</span>
-        </div>
+        <div className="reports-leave-stat"><span className="reports-leave-stat-value" style={{ color: '#22c55e' }}>{leaveStats.approved || 0}</span><span className="reports-leave-stat-label">Approved</span></div>
+        <div className="reports-leave-stat"><span className="reports-leave-stat-value" style={{ color: '#f59e0b' }}>{leaveStats.pending || 0}</span><span className="reports-leave-stat-label">Pending</span></div>
+        <div className="reports-leave-stat"><span className="reports-leave-stat-value" style={{ color: '#ef4444' }}>{leaveStats.rejected || 0}</span><span className="reports-leave-stat-label">Rejected</span></div>
       </div>
     </div>
   );
@@ -893,22 +981,25 @@ export default function AdminReports() {
   const renderPayrollReport = () => (
     <div className="reports-table-section">
       <div className="reports-table-header">
-        <h3>Payroll Report ({filteredPayroll.length} records)</h3>
-        <button className="reports-export-btn" onClick={handleExportCSV} disabled={exporting}>
-          <Download size={16} /> Export CSV
-        </button>
+        <h3><Wallet size={18} style={{ display: 'inline', verticalAlign: 'middle', marginRight: 8 }} /> Payroll Report ({filteredPayroll.length} records)</h3>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button className="reports-export-btn" onClick={handleExportCSV} disabled={exporting}><FileSpreadsheet size={14} /> CSV</button>
+          <button className="reports-export-btn" onClick={handleExportExcel} disabled={exporting}><File size={14} /> Excel</button>
+          <button className="reports-export-btn" onClick={handleExportPDF}><Download size={14} /> PDF</button>
+        </div>
       </div>
-      <div className="reports-table-wrapper">
+
+      {payrollDistribution.length > 0 && (
+        <ChartCard title="Payroll Distribution" subtitle="Salary breakdown by department">
+          <DonutChart data={payrollDistribution} size={160} />
+        </ChartCard>
+      )}
+
+      <div className="reports-table-wrapper" style={{ marginTop: 16 }}>
         <table className="reports-data-table">
           <thead>
             <tr>
-              <th>Employee</th>
-              <th>Period</th>
-              <th>Base Pay</th>
-              <th>Bonus</th>
-              <th>Deductions</th>
-              <th>Net Pay</th>
-              <th>Status</th>
+              <th>Employee</th><th>Period</th><th>Base Pay</th><th>Bonus</th><th>Deductions</th><th>Net Pay</th><th>Status</th>
             </tr>
           </thead>
           <tbody>
@@ -918,42 +1009,24 @@ export default function AdminReports() {
                 <tr key={rec.id}>
                   <td><strong>{emp?.name || rec.employeeName || 'Unknown'}</strong></td>
                   <td>{rec.period}</td>
-                  <td>${rec.baseSalary.toLocaleString()}</td>
-                  <td className="reports-payroll-bonus">${rec.bonus.toLocaleString()}</td>
-                  <td className="reports-payroll-deduction">${rec.totalDeductions.toLocaleString()}</td>
-                  <td><strong>${rec.netSalary.toLocaleString()}</strong></td>
-                  <td>
-                    <span className={`reports-status-badge reports-status-${rec.status === 'Paid' ? 'approved' : 'pending'}`}>
-                      {rec.status}
-                    </span>
-                  </td>
+                  <td>${(rec.baseSalary || 0).toLocaleString()}</td>
+                  <td className="reports-payroll-bonus">${(rec.bonus || 0).toLocaleString()}</td>
+                  <td className="reports-payroll-deduction">${(rec.totalDeductions || 0).toLocaleString()}</td>
+                  <td><strong>${(rec.netSalary || 0).toLocaleString()}</strong></td>
+                  <td><span className={`reports-status-badge reports-status-${rec.status === 'Paid' ? 'approved' : 'pending'}`}>{rec.status}</span></td>
                 </tr>
               );
             })}
           </tbody>
         </table>
       </div>
+
       <div className="reports-payroll-summary">
-        <div className="reports-payroll-stat">
-          <span className="reports-payroll-stat-label">Total Payroll</span>
-          <span className="reports-payroll-stat-value">${(stats.totalPayrollAmount / 1000).toFixed(0)}k</span>
-        </div>
-        <div className="reports-payroll-stat">
-          <span className="reports-payroll-stat-label">Total Bonuses</span>
-          <span className="reports-payroll-stat-value" style={{ color: '#22c55e' }}>${(stats.totalBonuses / 1000).toFixed(0)}k</span>
-        </div>
-        <div className="reports-payroll-stat">
-          <span className="reports-payroll-stat-label">Total Deductions</span>
-          <span className="reports-payroll-stat-value" style={{ color: '#ef4444' }}>${(stats.totalDeductions / 1000).toFixed(0)}k</span>
-        </div>
-        <div className="reports-payroll-stat">
-          <span className="reports-payroll-stat-label">Paid Records</span>
-          <span className="reports-payroll-stat-value">{payrollStats.paidCount || 0}</span>
-        </div>
-        <div className="reports-payroll-stat">
-          <span className="reports-payroll-stat-label">Pending Records</span>
-          <span className="reports-payroll-stat-value" style={{ color: '#f59e0b' }}>{payrollStats.pendingCount || 0}</span>
-        </div>
+        <div className="reports-payroll-stat"><span className="reports-payroll-stat-label">Total Payroll</span><span className="reports-payroll-stat-value">${(stats.totalPayrollAmount / 1000).toFixed(0)}k</span></div>
+        <div className="reports-payroll-stat"><span className="reports-payroll-stat-label">Total Bonuses</span><span className="reports-payroll-stat-value" style={{ color: '#22c55e' }}>${(stats.totalBonuses / 1000).toFixed(0)}k</span></div>
+        <div className="reports-payroll-stat"><span className="reports-payroll-stat-label">Total Deductions</span><span className="reports-payroll-stat-value" style={{ color: '#ef4444' }}>${(stats.totalDeductions / 1000).toFixed(0)}k</span></div>
+        <div className="reports-payroll-stat"><span className="reports-payroll-stat-label">Paid Records</span><span className="reports-payroll-stat-value">{payrollStats.paidCount || 0}</span></div>
+        <div className="reports-payroll-stat"><span className="reports-payroll-stat-label">Pending Records</span><span className="reports-payroll-stat-value" style={{ color: '#f59e0b' }}>{payrollStats.pendingCount || 0}</span></div>
       </div>
     </div>
   );
@@ -967,10 +1040,7 @@ export default function AdminReports() {
           const activeCount = deptEmployees.filter((e) => e.status === 'Active').length;
           const onLeaveCount = deptEmployees.filter((e) => e.status === 'On Leave').length;
           const inactiveCount = deptEmployees.filter((e) => e.status === 'Inactive').length;
-          const deptIcon = {
-            Engineering: '💻', Design: '🎨', Marketing: '📢', Sales: '💼',
-            HR: '👥', Finance: '💰', Operations: '⚙️', Support: '🎧',
-          };
+          const deptIcon = { Engineering: '💻', Design: '🎨', Marketing: '📢', Sales: '💼', HR: '👥', Finance: '💰', Operations: '⚙️', Support: '🎧' };
 
           return (
             <div key={dept.name} className="reports-dept-card">
@@ -982,30 +1052,14 @@ export default function AdminReports() {
                 </div>
               </div>
               <div className="reports-dept-stats">
-                <div className="reports-dept-stat">
-                  <CheckCircle size={14} style={{ color: '#22c55e' }} />
-                  <span>{activeCount} active</span>
-                </div>
-                {onLeaveCount > 0 && (
-                  <div className="reports-dept-stat">
-                    <Calendar size={14} style={{ color: '#f59e0b' }} />
-                    <span>{onLeaveCount} on leave</span>
-                  </div>
-                )}
-                {inactiveCount > 0 && (
-                  <div className="reports-dept-stat">
-                    <XCircle size={14} style={{ color: '#ef4444' }} />
-                    <span>{inactiveCount} inactive</span>
-                  </div>
-                )}
+                <div className="reports-dept-stat"><CheckCircle size={14} style={{ color: '#22c55e' }} /><span>{activeCount} active</span></div>
+                {onLeaveCount > 0 && <div className="reports-dept-stat"><Calendar size={14} style={{ color: '#f59e0b' }} /><span>{onLeaveCount} on leave</span></div>}
+                {inactiveCount > 0 && <div className="reports-dept-stat"><XCircle size={14} style={{ color: '#ef4444' }} /><span>{inactiveCount} inactive</span></div>}
               </div>
               <div className="reports-dept-bar">
-                <div
-                  className="reports-dept-bar-fill"
-                  style={{ width: `${(count / stats.totalEmp) * 100}%`, background: dept.color || '#6366f1' }}
-                />
+                <div className="reports-dept-bar-fill" style={{ width: `${stats.totalEmp > 0 ? (count / stats.totalEmp) * 100 : 0}%`, background: dept.color || '#6366f1' }} />
               </div>
-              <span className="reports-dept-pct">{Math.round((count / stats.totalEmp) * 100)}% of total</span>
+              <span className="reports-dept-pct">{stats.totalEmp > 0 ? Math.round((count / stats.totalEmp) * 100) : 0}% of total</span>
             </div>
           );
         })}
@@ -1030,7 +1084,7 @@ export default function AdminReports() {
       <div className="reports-header">
         <div className="reports-header-text">
           <h1>Reports & Analytics</h1>
-          <p>Comprehensive insights across all HR modules</p>
+          <p>Comprehensive insights across all HR modules — powered by MongoDB</p>
         </div>
         <div className="reports-header-actions">
           <button className="reports-print-btn" onClick={handlePrint}>
@@ -1044,7 +1098,7 @@ export default function AdminReports() {
           { label: 'Total Employees', value: stats.totalEmp, icon: Users, color: '#6366f1', bg: 'rgba(99,102,241,0.1)' },
           { label: 'Present Today', value: stats.presentToday, icon: CheckCircle, color: '#22c55e', bg: 'rgba(34,197,94,0.1)' },
           { label: 'Employees On Leave', value: stats.onLeaveToday, icon: Calendar, color: '#f59e0b', bg: 'rgba(245,158,11,0.1)' },
-          { label: 'Total Payroll', value: `$${(stats.totalPayrollAmount / 1000000).toFixed(1)}M`, icon: Wallet, color: '#8b5cf6', bg: 'rgba(139,92,246,0.1)' },
+          { label: 'Total Payroll', value: `$${(stats.totalPayrollAmount / 1000).toFixed(0)}k`, icon: Wallet, color: '#8b5cf6', bg: 'rgba(139,92,246,0.1)' },
           { label: 'Attendance Rate', value: `${stats.attendanceRate}%`, icon: Target, color: '#06b6d4', bg: 'rgba(6,182,212,0.1)' },
         ].map((card, i) => (
           <div key={i} className="reports-summary-card">
@@ -1062,11 +1116,7 @@ export default function AdminReports() {
       <div className="reports-toolbar">
         <div className="reports-tabs">
           {REPORT_TYPES.map((r) => (
-            <button
-              key={r.key}
-              className={`reports-tab ${activeReport === r.key ? 'active' : ''}`}
-              onClick={() => setActiveReport(r.key)}
-            >
+            <button key={r.key} className={`reports-tab ${activeReport === r.key ? 'active' : ''}`} onClick={() => setActiveReport(r.key)}>
               <r.icon size={16} /> {r.label}
             </button>
           ))}
@@ -1082,10 +1132,7 @@ export default function AdminReports() {
               style={{ width: '100%', boxSizing: 'border-box', padding: '8px 12px 8px 34px', borderRadius: 8, border: '1px solid var(--border-color)', background: 'var(--input-bg)', color: 'var(--text-primary)', fontSize: '0.82rem', fontWeight: 500, outline: 'none' }}
             />
           </div>
-          <button
-            className="reports-filter-toggle"
-            onClick={() => setShowFilters(!showFilters)}
-          >
+          <button className="reports-filter-toggle" onClick={() => setShowFilters(!showFilters)}>
             <Filter size={16} /> Filters {showFilters ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
           </button>
         </div>
@@ -1096,39 +1143,44 @@ export default function AdminReports() {
           <div className="reports-filter-group">
             <label>Month</label>
             <select value={selectedMonth} onChange={(e) => setSelectedMonth(Number(e.target.value))}>
-              {MONTHS.map((m, i) => (
-                <option key={i} value={i}>{m}</option>
-              ))}
+              {MONTHS.map((m, i) => (<option key={i} value={i}>{m}</option>))}
             </select>
           </div>
           <div className="reports-filter-group">
             <label>Department</label>
             <select value={selectedDept} onChange={(e) => setSelectedDept(e.target.value)}>
               <option value="All">All Departments</option>
-              {departments.map((d) => (
-                <option key={d.name} value={d.name}>{d.name}</option>
-              ))}
+              {departments.map((d) => (<option key={d.name} value={d.name}>{d.name}</option>))}
+            </select>
+          </div>
+          <div className="reports-filter-group">
+            <label>Employee</label>
+            <select value={selectedEmployee} onChange={(e) => setSelectedEmployee(e.target.value)}>
+              <option value="All">All Employees</option>
+              {allEmployees.map((e) => (<option key={e.id} value={e.id}>{e.name}</option>))}
             </select>
           </div>
           <div className="reports-filter-group">
             <label>Report Type</label>
             <select value={selectedReportType} onChange={(e) => setSelectedReportType(e.target.value)}>
-              {REPORT_TYPE_OPTIONS.map((opt) => (
-                <option key={opt} value={opt}>{opt === 'All' ? 'All Types' : opt}</option>
-              ))}
+              {REPORT_TYPE_OPTIONS.map((opt) => (<option key={opt} value={opt}>{opt === 'All' ? 'All Types' : opt}</option>))}
             </select>
           </div>
           <div className="reports-filter-group">
             <label>Status</label>
             <select value={selectedStatus} onChange={(e) => setSelectedStatus(e.target.value)}>
-              {STATUS_OPTIONS.map((opt) => (
-                <option key={opt} value={opt}>{opt === 'All' ? 'All Statuses' : opt}</option>
-              ))}
+              {STATUS_OPTIONS.map((opt) => (<option key={opt} value={opt}>{opt === 'All' ? 'All Statuses' : opt}</option>))}
             </select>
           </div>
-          <button className="reports-filter-reset" onClick={handleResetFilters}>
-            Reset Filters
-          </button>
+          <div className="reports-filter-group">
+            <label>Date From</label>
+            <input type="date" value={dateRangeStart} onChange={(e) => setDateRangeStart(e.target.value)} style={{ padding: '6px 10px', borderRadius: 6, border: '1px solid var(--border-color)', background: 'var(--input-bg)', color: 'var(--text-primary)', fontSize: '0.82rem' }} />
+          </div>
+          <div className="reports-filter-group">
+            <label>Date To</label>
+            <input type="date" value={dateRangeEnd} onChange={(e) => setDateRangeEnd(e.target.value)} style={{ padding: '6px 10px', borderRadius: 6, border: '1px solid var(--border-color)', background: 'var(--input-bg)', color: 'var(--text-primary)', fontSize: '0.82rem' }} />
+          </div>
+          <button className="reports-filter-reset" onClick={handleResetFilters}>Reset Filters</button>
         </div>
       )}
 
@@ -1137,90 +1189,32 @@ export default function AdminReports() {
       </div>
 
       {viewReportData && (
-        <div
-          style={{
-            position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-            background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center',
-            justifyContent: 'center', zIndex: 9999, padding: 20,
-          }}
-          onClick={() => setViewReportData(null)}
-        >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            style={{
-              background: 'var(--glass-bg, #1e1e2e)', backdropFilter: 'blur(20px)',
-              border: '1px solid var(--border-color, #333)', borderRadius: 16,
-              padding: 28, maxWidth: 520, width: '100%', maxHeight: '80vh', overflow: 'auto',
-            }}
-          >
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: 20 }} onClick={() => setViewReportData(null)}>
+          <div onClick={(e) => e.stopPropagation()} style={{ background: 'var(--glass-bg, #1e1e2e)', backdropFilter: 'blur(20px)', border: '1px solid var(--border-color, #333)', borderRadius: 16, padding: 28, maxWidth: 520, width: '100%', maxHeight: '80vh', overflow: 'auto' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 }}>
               <div>
-                <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-primary, #fff)' }}>
-                  {viewReportData.name}
-                </h3>
-                <p style={{ margin: '4px 0 0', fontSize: '0.8rem', color: 'var(--text-secondary, #999)' }}>
-                  Report Details
-                </p>
+                <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-primary, #fff)' }}>{viewReportData.name}</h3>
+                <p style={{ margin: '4px 0 0', fontSize: '0.8rem', color: 'var(--text-secondary, #999)' }}>Report Details</p>
               </div>
-              <button
-                onClick={() => setViewReportData(null)}
-                style={{
-                  background: 'none', border: 'none', color: 'var(--text-secondary, #999)',
-                  cursor: 'pointer', padding: 4, fontSize: '1.2rem', lineHeight: 1,
-                }}
-              >
-                &times;
-              </button>
+              <button onClick={() => setViewReportData(null)} style={{ background: 'none', border: 'none', color: 'var(--text-secondary, #999)', cursor: 'pointer', padding: 4, fontSize: '1.2rem', lineHeight: 1 }}>&times;</button>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
               {[
                 { label: 'Category', value: viewReportData.category },
                 { label: 'Department', value: viewReportData.department },
                 { label: 'Generated Date', value: viewReportData.generatedDate },
-                { label: 'Generated By', value: viewReportData.generatedBy },
                 { label: 'Status', value: viewReportData.status },
               ].map((item) => (
                 <div key={item.label}>
-                  <div style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--text-secondary, #999)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 4 }}>
-                    {item.label}
-                  </div>
+                  <div style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--text-secondary, #999)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 4 }}>{item.label}</div>
                   <div style={{ fontSize: '0.88rem', fontWeight: 600, color: 'var(--text-primary, #fff)' }}>
-                    <span
-                      className={`reports-status-badge reports-status-${item.label === 'Status' ? (item.value === 'Completed' ? 'approved' : item.value === 'Pending' ? 'pending' : 'active') : ''}`}
-                      style={item.label !== 'Status' ? {} : undefined}
-                    >
-                      {item.value}
-                    </span>
-                    {item.label !== 'Status' && item.value}
+                    <span className={`reports-status-badge reports-status-${item.label === 'Status' ? (item.value === 'Completed' ? 'approved' : item.value === 'Pending' ? 'pending' : 'active') : ''}`}>{item.value}</span>
                   </div>
                 </div>
               ))}
             </div>
             <div style={{ marginTop: 24, display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-              <button
-                onClick={() => setViewReportData(null)}
-                style={{
-                  padding: '8px 16px', borderRadius: 8, border: '1px solid var(--border-color, #333)',
-                  background: 'var(--glass-bg, #2a2a3e)', color: 'var(--text-primary, #fff)',
-                  fontSize: '0.82rem', fontWeight: 600, cursor: 'pointer',
-                }}
-              >
-                Close
-              </button>
-              <button
-                onClick={() => {
-                  handleExportCSV();
-                  setViewReportData(null);
-                }}
-                style={{
-                  padding: '8px 16px', borderRadius: 8, border: 'none',
-                  background: 'var(--primary, #6366f1)', color: '#fff',
-                  fontSize: '0.82rem', fontWeight: 600, cursor: 'pointer',
-                }}
-              >
-                <Download size={14} style={{ verticalAlign: 'middle', marginRight: 4 }} />
-                Export CSV
-              </button>
+              <button onClick={() => setViewReportData(null)} style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid var(--border-color, #333)', background: 'var(--glass-bg, #2a2a3e)', color: 'var(--text-primary, #fff)', fontSize: '0.82rem', fontWeight: 600, cursor: 'pointer' }}>Close</button>
             </div>
           </div>
         </div>

@@ -1,10 +1,10 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useNotifications } from '../contexts/NotificationsContext';
 import {
   Bell, BellRing, BellOff, Trash2,
   Clock, Wallet, Calendar, CheckCircle, AlertTriangle, ChevronDown,
-  UserCheck, FileText, MessageCircle, Lock, Megaphone, Gift,
+  UserCheck, Megaphone,
 } from 'lucide-react';
 
 const TABS = [
@@ -52,9 +52,16 @@ function formatTimestamp(ts) {
 export default function EmployeeNotifications() {
   const { user } = useAuth();
   const {
-    getEmployeeNotifications, getUnreadCountForEmployee,
-    markAsRead, markAsUnread, markAllAsReadForEmployee, deleteNotification,
+    notifications, getEmployeeNotifications, getUnreadCountForEmployee,
+    fetchEmployeeNotifications, markAsRead, markAsUnread, markAllAsReadForEmployee,
+    deleteNotification, clearAll,
   } = useNotifications();
+
+  useEffect(() => {
+    if (user?.id) {
+      fetchEmployeeNotifications(user.id);
+    }
+  }, [user?.id, fetchEmployeeNotifications]);
 
   const [activeTab, setActiveTab] = useState('all');
   const [expandedId, setExpandedId] = useState(null);
@@ -76,6 +83,10 @@ export default function EmployeeNotifications() {
     if (key === 'all') return empNotifications.length;
     if (key === 'unread') return empUnreadCount;
     return empNotifications.filter(n => n.category === key).length;
+  };
+
+  const handleClearAll = async () => {
+    await clearAll('Employee', user?.id);
   };
 
   return (

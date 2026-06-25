@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { X, Send, Calendar, FileText, AlertCircle } from 'lucide-react';
 import { useLeave } from '../../contexts/LeaveContext';
-import { useNotifications } from '../../contexts/NotificationsContext';
+import { useEmployees } from '../../contexts/EmployeeContext';
 
 const LEAVE_TYPES = [
   'Casual Leave', 'Sick Leave', 'Earned Leave',
@@ -22,8 +22,10 @@ function calcDuration(start, end) {
 
 export default function LeaveApplicationForm({ employee, onClose }) {
   const { addLeaveRequest, getLeaveBalance } = useLeave();
-  const { addNotification } = useNotifications();
+  const { employees } = useEmployees();
   const balance = getLeaveBalance(employee.id);
+
+  const currentEmp = employees.find(e => e.id === employee.id);
 
   const [leaveType, setLeaveType] = useState('');
   const [startDate, setStartDate] = useState('');
@@ -58,6 +60,7 @@ export default function LeaveApplicationForm({ employee, onClose }) {
     if (!validate()) return;
 
     addLeaveRequest({
+      mongoId: currentEmp?._id,
       employeeId: employee.id,
       employeeName: `${employee.firstName} ${employee.lastName}`,
       employeeAvatar: employee.avatar,
@@ -67,16 +70,6 @@ export default function LeaveApplicationForm({ employee, onClose }) {
       endDate,
       duration,
       reason: reason.trim(),
-    });
-
-    addNotification({
-      title: 'New Leave Request',
-      description: `${employee.firstName} ${employee.lastName} has submitted a ${leaveType} request for ${startDate} to ${endDate} (${duration} days). Reason: ${reason.trim()}`,
-      timestamp: new Date().toISOString(),
-      category: 'Leave',
-      priority: 'Medium',
-      read: false,
-      targetEmployeeId: null,
     });
 
     onClose();

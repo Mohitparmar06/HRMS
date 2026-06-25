@@ -5,13 +5,14 @@ import {
   DollarSign, Mail, Phone, Eye, ChevronLeft, ChevronRight
 } from 'lucide-react';
 import { useDepartments } from '../../contexts/DepartmentContext';
-import { departments as deptConfig } from '../../services/dummyData';
+import { useEmployees } from '../../contexts/EmployeeContext';
 import { formatDate, formatCurrency } from '../../utils/formatters';
 
 export default function DepartmentDetails() {
   const navigate = useNavigate();
   const { id } = useParams();
-  const { getDepartment, getEmployeesByDept } = useDepartments();
+  const { getDepartment } = useDepartments();
+  const { employees } = useEmployees();
   const dept = getDepartment(id);
   const [empPage, setEmpPage] = useState(1);
   const empPageSize = 8;
@@ -26,7 +27,7 @@ export default function DepartmentDetails() {
     );
   }
 
-  const deptEmployees = getEmployeesByDept(dept.name);
+  const deptEmployees = employees.filter(e => e.department === dept.name);
   const totalSalary = deptEmployees.reduce((sum, e) => sum + e.salary, 0);
   const activeCount = deptEmployees.filter(e => e.status === 'Active').length;
   const empTotalPages = Math.ceil(deptEmployees.length / empPageSize);

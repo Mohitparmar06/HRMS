@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Save, Upload, User } from 'lucide-react';
 import { useEmployees } from '../../contexts/EmployeeContext';
-import { departments } from '../../services/dummyData';
 
 const positionsByDept = {
   'Engineering': ['Software Engineer', 'Senior Software Engineer', 'Staff Engineer', 'Engineering Manager', 'Data Analyst', 'DevOps Engineer', 'QA Engineer', 'Technical Writer'],
@@ -18,7 +17,7 @@ const positionsByDept = {
 export default function EditEmployee() {
   const navigate = useNavigate();
   const { id } = useParams();
-  const { getEmployee, updateEmployee } = useEmployees();
+  const { getEmployee, updateEmployee, departments } = useEmployees();
   const emp = getEmployee(id);
 
   const [form, setForm] = useState(null);

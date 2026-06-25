@@ -1,5 +1,5 @@
-import { createContext, useContext, useState, useCallback, useMemo } from 'react';
-import { leaveRequests as initialLeaveRequests } from '../services/dummyData';
+import { createContext, useContext, useState, useCallback, useEffect, useMemo } from 'react';
+import API from '../services/api';
 
 const LeaveContext = createContext(null);
 
@@ -13,28 +13,44 @@ const LEAVE_BALANCE = {
 };
 
 function toLocalDateStr(d) {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  if (!d) return null;
+  const date = new Date(d);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 }
 
 export function LeaveProvider({ children }) {
-  const [leaveRecords, setLeaveRecords] = useState(() => [...initialLeaveRequests]);
+  const [leaveRecords, setLeaveRecords] = useState([]);
 
-  const addLeaveRequest = useCallback((request) => {
-    setLeaveRecords(prev => {
-      const maxNum = prev.reduce((max, r) => {
-        const num = parseInt(r.id.replace('LR-', ''), 10);
-        return num > max ? num : max;
-      }, 0);
-      const newRecord = {
-        ...request,
-        id: `LR-${String(maxNum + 1).padStart(4, '0')}`,
-        status: 'Pending',
-        appliedDate: toLocalDateStr(new Date()),
-        approvedDate: null,
-        rejectionReason: null,
+  const fetchLeaves = useCallback(async () => {
+    try {
+      const res = await API.get('/leaves');
+      setLeaveRecords(res.data.leaves || []);
+    } catch (error) {
+      console.error('Failed to fetch leaves:', error);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchLeaves();
+  }, [fetchLeaves]);
+
+  const addLeaveRequest = useCallback(async (request) => {
+    try {
+      const payload = {
+        employeeId: request.mongoId,
+        leaveType: request.leaveType,
+        startDate: request.startDate,
+        endDate: request.endDate,
+        duration: request.duration,
+        reason: request.reason,
       };
-      return [newRecord, ...prev];
-    });
+      const res = await API.post('/leaves', payload);
+      if (res.data.success) {
+        setLeaveRecords(prev => [res.data.leave, ...prev]);
+      }
+    } catch (error) {
+      console.error('Failed to add leave request:', error);
+    }
   }, []);
 
   const updateLeaveRequest = useCallback((id, updates) => {
@@ -43,40 +59,55 @@ export function LeaveProvider({ children }) {
     );
   }, []);
 
-  const approveLeave = useCallback((id, approvedBy) => {
-    setLeaveRecords(prev =>
-      prev.map(r => r.id === id ? {
-        ...r,
-        status: 'Approved',
-        approvedDate: toLocalDateStr(new Date()),
-        approvedBy: approvedBy || 'Admin',
-      } : r)
-    );
+  const approveLeave = useCallback(async (id, approvedBy) => {
+    try {
+      const res = await API.put(`/leaves/approve/${id}`, { approvedBy: approvedBy || 'Admin' });
+      if (res.data.success) {
+        setLeaveRecords(prev =>
+          prev.map(r => r.id === id ? res.data.leave : r)
+        );
+      }
+    } catch (error) {
+      console.error('Failed to approve leave:', error);
+    }
   }, []);
 
-  const rejectLeave = useCallback((id, rejectionReason, rejectedBy) => {
-    setLeaveRecords(prev =>
-      prev.map(r => r.id === id ? {
-        ...r,
-        status: 'Rejected',
-        approvedDate: toLocalDateStr(new Date()),
+  const rejectLeave = useCallback(async (id, rejectionReason, rejectedBy) => {
+    try {
+      const res = await API.put(`/leaves/reject/${id}`, {
         rejectionReason: rejectionReason || '',
         rejectedBy: rejectedBy || 'Admin',
-      } : r)
-    );
+      });
+      if (res.data.success) {
+        setLeaveRecords(prev =>
+          prev.map(r => r.id === id ? res.data.leave : r)
+        );
+      }
+    } catch (error) {
+      console.error('Failed to reject leave:', error);
+    }
   }, []);
 
-  const cancelLeave = useCallback((id) => {
-    setLeaveRecords(prev =>
-      prev.map(r => r.id === id && r.status === 'Pending' ? {
-        ...r,
-        status: 'Cancelled',
-      } : r)
-    );
+  const cancelLeave = useCallback(async (id) => {
+    try {
+      const res = await API.put(`/leaves/cancel/${id}`);
+      if (res.data.success) {
+        setLeaveRecords(prev =>
+          prev.map(r => r.id === id ? res.data.leave : r)
+        );
+      }
+    } catch (error) {
+      console.error('Failed to cancel leave:', error);
+    }
   }, []);
 
-  const deleteLeaveRequest = useCallback((id) => {
-    setLeaveRecords(prev => prev.filter(r => r.id !== id));
+  const deleteLeaveRequest = useCallback(async (id) => {
+    try {
+      await API.delete(`/leaves/${id}`);
+      setLeaveRecords(prev => prev.filter(r => r.id !== id));
+    } catch (error) {
+      console.error('Failed to delete leave:', error);
+    }
   }, []);
 
   const getEmployeeLeaves = useCallback((employeeId) => {
@@ -99,7 +130,7 @@ export function LeaveProvider({ children }) {
 
   const getLeaveStats = useCallback(() => {
     const today = new Date();
-    const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+    const todayStr = toLocalDateStr(today);
     const total = leaveRecords.length;
     const pending = leaveRecords.filter(r => r.status === 'Pending').length;
     const approved = leaveRecords.filter(r => r.status === 'Approved').length;
@@ -148,11 +179,12 @@ export function LeaveProvider({ children }) {
     getLeaveBalance,
     getLeaveStats,
     getLeaveByType,
+    fetchLeaves,
   }), [
     leaveRecords,
     addLeaveRequest, updateLeaveRequest, approveLeave, rejectLeave,
     cancelLeave, deleteLeaveRequest, getEmployeeLeaves, getLeaveBalance,
-    getLeaveStats, getLeaveByType,
+    getLeaveStats, getLeaveByType, fetchLeaves,
   ]);
 
   return (

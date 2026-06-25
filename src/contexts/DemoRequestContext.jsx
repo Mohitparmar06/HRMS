@@ -1,69 +1,105 @@
-import { createContext, useContext, useState, useCallback, useMemo } from 'react';
+import { createContext, useContext, useState, useCallback, useEffect, useMemo } from 'react';
+import API from '../services/api';
 
 const DemoRequestContext = createContext(null);
 
-let nextId = 1;
-
 export function DemoRequestProvider({ children }) {
   const [requests, setRequests] = useState([]);
+  const [stats, setStats] = useState({ total: 0, pending: 0, approved: 0, rejected: 0, completed: 0 });
+  const [loading, setLoading] = useState(false);
 
-  const addRequest = useCallback((request) => {
-    const id = nextId++;
-    const newRequest = {
-      ...request,
-      id,
-      status: 'Pending',
-      submittedAt: new Date().toISOString(),
-      viewedAt: null,
-      contactedAt: null,
-    };
-    setRequests(prev => [newRequest, ...prev]);
-    return newRequest;
+  const fetchRequests = useCallback(async (params = {}) => {
+    try {
+      setLoading(true);
+      const { data } = await API.get('/demo-requests', { params });
+      if (data.success) {
+        setRequests(data.requests);
+      }
+    } catch (error) {
+      console.error('Failed to fetch demo requests:', error);
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
-  const markAsViewed = useCallback((id) => {
-    setRequests(prev => prev.map(r =>
-      r.id === id ? { ...r, status: 'Viewed', viewedAt: new Date().toISOString() } : r
-    ));
+  const fetchStats = useCallback(async () => {
+    try {
+      const { data } = await API.get('/demo-requests/stats');
+      if (data.success) {
+        setStats(data.stats);
+      }
+    } catch (error) {
+      console.error('Failed to fetch demo request stats:', error);
+    }
   }, []);
 
-  const markAsContacted = useCallback((id) => {
-    setRequests(prev => prev.map(r =>
-      r.id === id ? { ...r, status: 'Contacted', contactedAt: new Date().toISOString() } : r
-    ));
-  }, []);
+  useEffect(() => {
+    fetchRequests();
+    fetchStats();
+  }, [fetchRequests, fetchStats]);
 
-  const markAsScheduled = useCallback((id) => {
-    setRequests(prev => prev.map(r =>
-      r.id === id ? { ...r, status: 'Scheduled' } : r
-    ));
-  }, []);
+  const addRequest = useCallback(async (request) => {
+    try {
+      const { data } = await API.post('/demo-requests', request);
+      if (data.success) {
+        setRequests(prev => [data.request, ...prev]);
+        await fetchStats();
+        return { success: true };
+      }
+      return { success: false, message: data.message };
+    } catch (error) {
+      return { success: false, message: error.response?.data?.message || 'Failed to submit request' };
+    }
+  }, [fetchStats]);
 
-  const deleteRequest = useCallback((id) => {
-    setRequests(prev => prev.filter(r => r.id !== id));
-  }, []);
+  const updateStatus = useCallback(async (id, status, statusNote = '') => {
+    try {
+      const { data } = await API.put(`/demo-requests/${id}`, { status, statusNote });
+      if (data.success) {
+        setRequests(prev => prev.map(r => r._id === id ? data.request : r));
+        await fetchStats();
+        return { success: true };
+      }
+      return { success: false, message: data.message };
+    } catch (error) {
+      return { success: false, message: error.response?.data?.message || 'Failed to update status' };
+    }
+  }, [fetchStats]);
 
-  const getStats = useCallback(() => {
-    const total = requests.length;
-    const pending = requests.filter(r => r.status === 'Pending').length;
-    const viewed = requests.filter(r => r.status === 'Viewed').length;
-    const contacted = requests.filter(r => r.status === 'Contacted').length;
-    const scheduled = requests.filter(r => r.status === 'Scheduled').length;
-    return { total, pending, viewed, contacted, scheduled };
-  }, [requests]);
+  const approveRequest = useCallback((id, note) => updateStatus(id, 'Approved', note), [updateStatus]);
+  const rejectRequest = useCallback((id, note) => updateStatus(id, 'Rejected', note), [updateStatus]);
+  const completeRequest = useCallback((id, note) => updateStatus(id, 'Completed', note), [updateStatus]);
 
-  const contextValue = useMemo(() => ({
+  const deleteRequest = useCallback(async (id) => {
+    try {
+      const { data } = await API.delete(`/demo-requests/${id}`);
+      if (data.success) {
+        setRequests(prev => prev.filter(r => r._id !== id));
+        await fetchStats();
+        return { success: true };
+      }
+      return { success: false, message: data.message };
+    } catch (error) {
+      return { success: false, message: error.response?.data?.message || 'Failed to delete request' };
+    }
+  }, [fetchStats]);
+
+  const value = useMemo(() => ({
     requests,
+    stats,
+    loading,
+    fetchRequests,
+    fetchStats,
     addRequest,
-    markAsViewed,
-    markAsContacted,
-    markAsScheduled,
+    updateStatus,
+    approveRequest,
+    rejectRequest,
+    completeRequest,
     deleteRequest,
-    getStats,
-  }), [requests, addRequest, markAsViewed, markAsContacted, markAsScheduled, deleteRequest, getStats]);
+  }), [requests, stats, loading, fetchRequests, fetchStats, addRequest, updateStatus, approveRequest, rejectRequest, completeRequest, deleteRequest]);
 
   return (
-    <DemoRequestContext.Provider value={contextValue}>
+    <DemoRequestContext.Provider value={value}>
       {children}
     </DemoRequestContext.Provider>
   );

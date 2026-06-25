@@ -5,7 +5,6 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useLeave } from '../../contexts/LeaveContext';
-import { useNotifications } from '../../contexts/NotificationsContext';
 import LeaveApplicationForm from '../../components/Leave/LeaveApplicationForm';
 import LeaveDetailsModal from '../../components/Leave/LeaveDetailsModal';
 
@@ -41,7 +40,6 @@ function formatDate(dateStr) {
 export default function EmployeeLeave() {
   const { user } = useAuth();
   const { getEmployeeLeaves, getLeaveBalance, cancelLeave, leaveBalanceConfig } = useLeave();
-  const { addNotification } = useNotifications();
 
   const currentEmp = user;
   const empLeaves = useMemo(() => getEmployeeLeaves(currentEmp.id), [currentEmp.id, getEmployeeLeaves]);
@@ -246,17 +244,8 @@ export default function EmployeeLeave() {
               </p>
               <div className="leave-form-actions">
                 <button className="btn btn-outline" onClick={() => setCancelConfirm(null)}>Keep Request</button>
-                <button className="btn btn-danger" onClick={() => {
-                  addNotification({
-                    title: 'Leave Cancelled',
-                    description: `${user.firstName} ${user.lastName} cancelled their ${cancelConfirm.leaveType} request (${formatDate(cancelConfirm.startDate)} - ${formatDate(cancelConfirm.endDate)}).`,
-                    timestamp: new Date().toISOString(),
-                    category: 'Leave',
-                    priority: 'Medium',
-                    read: false,
-                    targetEmployeeId: null,
-                  });
-                  cancelLeave(cancelConfirm.id);
+                <button className="btn btn-danger" onClick={async () => {
+                  await cancelLeave(cancelConfirm.id);
                   setCancelConfirm(null);
                 }}>
                   <X size={16} /> Cancel Leave

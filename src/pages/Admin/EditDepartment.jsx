@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Save, Building2 } from 'lucide-react';
 import { useDepartments } from '../../contexts/DepartmentContext';
-import { employees as allEmployees } from '../../services/dummyData';
+import { useEmployees } from '../../contexts/EmployeeContext';
 
 const colorOptions = [
   { label: 'Blue', value: '#3b82f6' },
@@ -19,12 +19,13 @@ export default function EditDepartment() {
   const navigate = useNavigate();
   const { id } = useParams();
   const { getDepartment, updateDepartment } = useDepartments();
+  const { employees } = useEmployees();
   const dept = getDepartment(id);
 
   const [form, setForm] = useState(null);
   const [errors, setErrors] = useState({});
 
-  const heads = [...new Set(allEmployees.map(e => e.name))].sort();
+  const heads = [...new Set(employees.map(e => e.name))].sort();
 
   useEffect(() => {
     if (dept) {

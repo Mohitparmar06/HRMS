@@ -1,20 +1,27 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import {
   Search, CheckCircle, Clock, DollarSign,
   ChevronDown, ChevronUp, Eye, Check, X, FileText,
   ChevronLeft, ChevronRight, Users, TrendingUp, Wallet,
-  Download, Edit3, CreditCard, BadgeCheck, AlertTriangle
+  Download, Edit3, CreditCard, BadgeCheck, Trash2,
+  ArrowLeft, User
 } from 'lucide-react';
 import { usePayroll } from '../../contexts/PayrollContext';
+import { useEmployees } from '../../contexts/EmployeeContext';
 import { useDepartments } from '../../contexts/DepartmentContext';
 import { useSettings } from '../../contexts/SettingsContext';
-import { useNotifications } from '../../contexts/NotificationsContext';
 import PayrollDetailsModal from '../../components/Payroll/PayrollDetailsModal';
 import PayslipModal from '../../components/Payroll/PayslipModal';
 
 const STATUS_CONFIG = {
   Paid: { color: 'var(--success)', icon: CheckCircle, bg: 'rgba(16, 185, 129, 0.1)' },
   Pending: { color: 'var(--warning)', icon: Clock, bg: 'rgba(245, 158, 11, 0.1)' },
+};
+
+const EMPTY_FORM = {
+  baseSalary: '', hra: '', transport: '', medical: '',
+  specialAllowance: '', bonus: '', overtimePay: '',
+  pf: '', incomeTax: '', insurance: '', otherDeductions: '',
 };
 
 function formatDate(dateStr) {
@@ -37,7 +44,7 @@ function computeSalary(form) {
   const other = Number(form.otherDeductions) || 0;
 
   const allowances = hra + transport + medical + special;
-  const totalDeductions = pf + 200 + tax + insurance + other;
+  const totalDeductions = pf + tax + insurance + other;
   const grossSalary = base + allowances + bonus + overtime;
   const netSalary = grossSalary - totalDeductions;
 
@@ -45,10 +52,10 @@ function computeSalary(form) {
 }
 
 export default function AdminPayroll() {
-  const { records, periods, updateRecord, markAsPaid, markMultipleAsPaid, generatePayroll, generatePayrollForPeriod, getPayrollStats } = usePayroll();
+  const { records, periods, addRecord, updateRecord, markAsPaid, markMultipleAsPaid, deleteRecord, getPayrollStats } = usePayroll();
+  const { employees } = useEmployees();
   const { departments } = useDepartments();
   const { formatCurrency } = useSettings();
-  const { addNotification } = useNotifications();
 
   const [search, setSearch] = useState('');
   const [deptFilter, setDeptFilter] = useState('all');
@@ -64,14 +71,22 @@ export default function AdminPayroll() {
   const [editForm, setEditForm] = useState({});
   const [selectedIds, setSelectedIds] = useState([]);
   const [generateModal, setGenerateModal] = useState(false);
-  const [generateTarget, setGenerateTarget] = useState(null);
-  const [generateConfirm, setGenerateConfirm] = useState(false);
+  const [genForm, setGenForm] = useState({ employeeId: '', periodKey: '', ...EMPTY_FORM });
+  const [genError, setGenError] = useState('');
+  const [historyEmployee, setHistoryEmployee] = useState(null);
+  const [deleteConfirm, setDeleteConfirm] = useState(null);
   const perPage = 12;
 
   const stats = useMemo(() => getPayrollStats(), [records]);
 
+  const genPreview = useMemo(() => computeSalary(genForm), [genForm]);
+
   const filteredRecords = useMemo(() => {
     let recs = [...records];
+
+    if (historyEmployee) {
+      recs = recs.filter(r => r.employeeId === historyEmployee);
+    }
 
     if (activeTab !== 'all') {
       recs = recs.filter(r => r.status === activeTab.charAt(0).toUpperCase() + activeTab.slice(1));
@@ -101,10 +116,15 @@ export default function AdminPayroll() {
     });
 
     return recs;
-  }, [records, search, deptFilter, statusFilter, periodFilter, sortField, sortDir, activeTab]);
+  }, [records, search, deptFilter, statusFilter, periodFilter, sortField, sortDir, activeTab, historyEmployee]);
 
   const totalPages = Math.ceil(filteredRecords.length / perPage);
   const paginatedRecords = filteredRecords.slice((page - 1) * perPage, page * perPage);
+
+  const historyEmpName = useMemo(() => {
+    if (!historyEmployee) return '';
+    return records.find(r => r.employeeId === historyEmployee)?.employeeName || historyEmployee;
+  }, [historyEmployee, records]);
 
   const toggleSort = (field) => {
     if (sortField === field) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
@@ -122,26 +142,17 @@ export default function AdminPayroll() {
     setSelectedIds([]);
   };
 
-  const tabCounts = useMemo(() => ({
-    all: records.length,
-    paid: records.filter(r => r.status === 'Paid').length,
-    pending: records.filter(r => r.status === 'Pending').length,
-  }), [records]);
+  const tabCounts = useMemo(() => {
+    const base = historyEmployee ? records.filter(r => r.employeeId === historyEmployee) : records;
+    return {
+      all: base.length,
+      paid: base.filter(r => r.status === 'Paid').length,
+      pending: base.filter(r => r.status === 'Pending').length,
+    };
+  }, [records, historyEmployee]);
 
-  const handleMarkAsPaid = (id) => {
-    const record = records.find(r => r.id === id);
-    markAsPaid(id);
-    if (record) {
-      addNotification({
-        title: 'Salary Paid',
-        description: `Your salary for ${record.period} ($${record.netSalary?.toLocaleString()}) has been deposited. Check your bank account.`,
-        timestamp: new Date().toISOString(),
-        category: 'Payroll',
-        priority: 'High',
-        read: false,
-        targetEmployeeId: record.employeeId,
-      });
-    }
+  const handleMarkAsPaid = async (id) => {
+    await markAsPaid(id);
   };
 
   const handleEditClick = (record) => {
@@ -163,11 +174,11 @@ export default function AdminPayroll() {
 
   const editPreview = useMemo(() => computeSalary(editForm), [editForm]);
 
-  const handleEditSave = () => {
+  const handleEditSave = async () => {
     if (!editRecord) return;
     const { allowances, totalDeductions, grossSalary, netSalary } = editPreview;
 
-    updateRecord(editRecord.id, {
+    await updateRecord(editRecord.id, {
       baseSalary: Number(editForm.baseSalary) || 0,
       bonus: Number(editForm.bonus) || 0,
       overtimePay: Number(editForm.overtimePay) || 0,
@@ -199,62 +210,86 @@ export default function AdminPayroll() {
     setSelectedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
   };
 
-  const handleBulkPay = () => {
+  const handleBulkPay = async () => {
     if (selectedIds.length === 0) return;
-    markMultipleAsPaid(selectedIds);
+    await markMultipleAsPaid(selectedIds);
     setSelectedIds([]);
   };
 
-  const handleGenerateClick = (period) => {
-    setGenerateTarget(period);
-    setGenerateConfirm(true);
+  const handleGenChange = (field, value) => {
+    setGenForm(f => ({ ...f, [field]: value }));
+    setGenError('');
   };
 
-  const handleGenerateConfirm = () => {
-    if (!generateTarget) return;
-    const existingCount = records.filter(r => r.periodKey === generateTarget.key).length;
-    if (existingCount > 0) {
-      generatePayroll(generateTarget.key);
-      const affectedRecords = records.filter(r => r.periodKey === generateTarget.key && r.status === 'Pending');
-      affectedRecords.forEach(r => {
-        addNotification({
-          title: 'Payroll Processed',
-          description: `Your salary for ${generateTarget.label} has been processed. Net pay: $${r.netSalary?.toLocaleString()}. Payment will be deposited shortly.`,
-          timestamp: new Date().toISOString(),
-          category: 'Payroll',
-          priority: 'High',
-          read: false,
-          targetEmployeeId: r.employeeId,
-        });
-      });
+  const handleGenerateSubmit = async () => {
+    setGenError('');
+    const { allowances, totalDeductions, grossSalary, netSalary } = genPreview;
+    const selectedPeriod = periods.find(p => p.key === genForm.periodKey);
+
+    if (!genForm.employeeId) { setGenError('Please select an employee'); return; }
+    if (!genForm.periodKey) { setGenError('Please select a pay period'); return; }
+    if (!genForm.baseSalary || Number(genForm.baseSalary) <= 0) { setGenError('Base salary must be greater than 0'); return; }
+    if (netSalary < 0) { setGenError('Net salary cannot be negative. Check deductions.'); return; }
+
+    const result = await addRecord({
+      employeeId: genForm.employeeId,
+      periodKey: genForm.periodKey,
+      period: selectedPeriod?.label || genForm.periodKey,
+      baseSalary: Number(genForm.baseSalary) || 0,
+      hra: Number(genForm.hra) || 0,
+      transport: Number(genForm.transport) || 0,
+      medical: Number(genForm.medical) || 0,
+      specialAllowance: Number(genForm.specialAllowance) || 0,
+      bonus: Number(genForm.bonus) || 0,
+      overtimePay: Number(genForm.overtimePay) || 0,
+      pf: Number(genForm.pf) || 0,
+      incomeTax: Number(genForm.incomeTax) || 0,
+      insurance: Number(genForm.insurance) || 0,
+      otherDeductions: Number(genForm.otherDeductions) || 0,
+      allowances,
+      totalDeductions,
+      grossSalary,
+      netSalary,
+    });
+
+    if (result.success) {
+      setGenerateModal(false);
+      setGenForm({ employeeId: '', periodKey: '', ...EMPTY_FORM });
     } else {
-      generatePayrollForPeriod(generateTarget.key, generateTarget.label);
-      addNotification({
-        title: 'Payroll Generated',
-        description: `${generateTarget.label} payroll has been generated for all employees. Reviews and approvals are pending.`,
-        timestamp: new Date().toISOString(),
-        category: 'Payroll',
-        priority: 'High',
-        read: false,
-        targetEmployeeId: null,
-      });
+      setGenError(result.message || 'Failed to create payroll');
     }
-    setGenerateConfirm(false);
-    setGenerateTarget(null);
-    setGenerateModal(false);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!deleteConfirm) return;
+    await deleteRecord(deleteConfirm.id);
+    setDeleteConfirm(null);
   };
 
   return (
     <div className="payroll-page">
       <div className="page-header">
         <div className="page-header-left">
-          <h1 className="page-title">Payroll Management</h1>
-          <p className="page-subtitle">Process salaries, generate payslips, and manage payments</p>
+          {historyEmployee ? (
+            <>
+              <button className="btn btn-outline" style={{ marginRight: 12, padding: '6px 12px' }} onClick={() => { setHistoryEmployee(null); setPage(1); }}>
+                <ArrowLeft size={16} />
+              </button>
+              <h1 className="page-title">{historyEmpName}</h1>
+            </>
+          ) : (
+            <h1 className="page-title">Payroll Management</h1>
+          )}
+          <p className="page-subtitle">
+            {historyEmployee ? 'Payroll history for this employee' : 'Process salaries, generate payslips, and manage payments'}
+          </p>
         </div>
         <div className="page-header-right">
-          <button className="btn btn-primary" onClick={() => setGenerateModal(true)}>
-            <Wallet size={16} /> Generate Payroll
-          </button>
+          {!historyEmployee && (
+            <button className="btn btn-primary" onClick={() => { setGenerateModal(true); setGenError(''); }}>
+              <Wallet size={16} /> Generate Payroll
+            </button>
+          )}
         </div>
       </div>
 
@@ -337,16 +372,18 @@ export default function AdminPayroll() {
               className="leave-search"
             />
           </div>
-          <select
-            value={periodFilter}
-            onChange={e => { setPeriodFilter(e.target.value); setPage(1); }}
-            className="leave-filter-select"
-          >
-            <option value="all">All Periods</option>
-            {periods.map(p => (
-              <option key={p.key} value={p.key}>{p.label}</option>
-            ))}
-          </select>
+          {!historyEmployee && (
+            <select
+              value={periodFilter}
+              onChange={e => { setPeriodFilter(e.target.value); setPage(1); }}
+              className="leave-filter-select"
+            >
+              <option value="all">All Periods</option>
+              {periods.map(p => (
+                <option key={p.key} value={p.key}>{p.label}</option>
+              ))}
+            </select>
+          )}
           <select
             value={deptFilter}
             onChange={e => { setDeptFilter(e.target.value); setPage(1); }}
@@ -381,12 +418,14 @@ export default function AdminPayroll() {
                 <th onClick={() => toggleSort('department')} className="sortable">
                   Department <SortIcon field="department" />
                 </th>
+                <th onClick={() => toggleSort('period')} className="sortable">
+                  Period <SortIcon field="period" />
+                </th>
                 <th onClick={() => toggleSort('baseSalary')} className="sortable">
                   Basic Salary <SortIcon field="baseSalary" />
                 </th>
                 <th>Bonus</th>
                 <th>Deductions</th>
-                <th>Tax</th>
                 <th onClick={() => toggleSort('netSalary')} className="sortable">
                   Net Salary <SortIcon field="netSalary" />
                 </th>
@@ -414,16 +453,18 @@ export default function AdminPayroll() {
                           {record.employeeAvatar}
                         </div>
                         <div>
-                          <span className="leave-emp-name">{record.employeeName}</span>
+                          <span className="leave-emp-name" style={{ cursor: 'pointer', textDecoration: 'underline' }} onClick={() => { setHistoryEmployee(record.employeeId); setPage(1); setActiveTab('all'); setHistoryEmployee(record.employeeId); }}>
+                            {record.employeeName}
+                          </span>
                           <span className="leave-emp-id">{record.employeeId}</span>
                         </div>
                       </div>
                     </td>
                     <td><span className="leave-dept-badge">{record.department}</span></td>
+                    <td><span className="leave-date">{record.period}</span></td>
                     <td><span className="payroll-salary">{formatCurrency(record.baseSalary)}</span></td>
                     <td><span className="payroll-salary bonus">{record.bonus > 0 ? formatCurrency(record.bonus) : '--'}</span></td>
                     <td><span className="payroll-salary deduction">{formatCurrency(record.totalDeductions)}</span></td>
-                    <td><span className="payroll-salary tax">{formatCurrency(record.incomeTax)}</span></td>
                     <td><span className="payroll-salary net">{formatCurrency(record.netSalary)}</span></td>
                     <td>
                       <span className="leave-status-badge" style={{ color: cfg.color, background: cfg.bg }}>
@@ -439,7 +480,7 @@ export default function AdminPayroll() {
                         <button className="leave-action-btn" title="Edit" onClick={() => handleEditClick(record)}>
                           <Edit3 size={16} />
                         </button>
-                        <button className="leave-action-btn" title="Generate Payslip" onClick={() => setPayslipRecord(record)}>
+                        <button className="leave-action-btn" title="Download Payslip" onClick={() => setPayslipRecord(record)}>
                           <Download size={16} />
                         </button>
                         {record.status === 'Pending' && (
@@ -447,6 +488,9 @@ export default function AdminPayroll() {
                             <CreditCard size={16} />
                           </button>
                         )}
+                        <button className="leave-action-btn" title="Delete" onClick={() => setDeleteConfirm(record)}>
+                          <Trash2 size={16} />
+                        </button>
                       </div>
                     </td>
                   </tr>
@@ -586,70 +630,154 @@ export default function AdminPayroll() {
       )}
 
       {generateModal && (
-        <div className="modal-overlay" onClick={() => { setGenerateModal(false); setGenerateConfirm(false); setGenerateTarget(null); }}>
+        <div className="modal-overlay" onClick={() => setGenerateModal(false)}>
           <div className="modal-content payroll-generate-modal" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
               <div className="modal-header-left">
                 <Wallet size={20} color="var(--primary-blue)" />
                 <div>
                   <h3>Generate Payroll</h3>
-                  <p className="modal-subtitle">Create or process payroll for a pay period</p>
+                  <p className="modal-subtitle">Create a payroll record for a specific employee</p>
                 </div>
               </div>
-              <button className="modal-close" onClick={() => { setGenerateModal(false); setGenerateConfirm(false); setGenerateTarget(null); }}><X size={20} /></button>
+              <button className="modal-close" onClick={() => setGenerateModal(false)}><X size={20} /></button>
             </div>
             <div className="modal-body">
-              {!generateConfirm ? (
-                <>
-                  <p style={{ color: 'var(--text-muted)', fontSize: '0.88rem', marginBottom: 16 }}>
-                    Select a pay period. If records already exist, pending ones will be marked as paid. If no records exist, new payroll will be generated for all active employees.
-                  </p>
-                  <div className="payroll-period-list">
-                    {periods.map(p => {
-                      const existingCount = records.filter(r => r.periodKey === p.key).length;
-                      const pendingCount = records.filter(r => r.periodKey === p.key && r.status === 'Pending').length;
-                      const pendingTotal = records.filter(r => r.periodKey === p.key && r.status === 'Pending').reduce((s, r) => s + r.netSalary, 0);
-                      const hasRecords = existingCount > 0;
-                      return (
-                        <div key={p.key} className="payroll-period-item" onClick={() => handleGenerateClick(p)}>
-                          <div className="payroll-period-info">
-                            <span className="payroll-period-label">{p.label}</span>
-                            <span className="payroll-period-count">
-                              {hasRecords
-                                ? `${pendingCount} pending of ${existingCount} total \u2022 ${formatCurrency(pendingTotal)}`
-                                : `No records yet \u2022 Will create for all employees`}
-                            </span>
-                          </div>
-                          <CreditCard size={18} color="var(--success)" />
-                        </div>
-                      );
-                    })}
-                  </div>
-                </>
-              ) : (
-                <div className="payroll-generate-confirm">
-                  <div className="payroll-generate-confirm-icon">
-                    <AlertTriangle size={32} color="var(--warning)" />
-                  </div>
-                  <h4>Confirm Generate Payroll</h4>
-                  <p>
-                    {records.filter(r => r.periodKey === generateTarget.key).length > 0
-                      ? `This will mark ${records.filter(r => r.periodKey === generateTarget.key && r.status === 'Pending').length} pending records as paid for ${generateTarget.label}.`
-                      : `This will create new payroll records for all active employees for ${generateTarget.label}.`}
-                  </p>
-                  <div className="leave-form-actions">
-                    <button className="btn btn-outline" onClick={() => { setGenerateConfirm(false); setGenerateTarget(null); }}>Back</button>
-                    <button className="btn btn-primary" onClick={handleGenerateConfirm}>
-                      <Check size={16} /> Confirm
-                    </button>
-                  </div>
+              <div className="leave-form-group">
+                <label className="leave-form-label">Employee *</label>
+                <select
+                  className="leave-form-input"
+                  value={genForm.employeeId}
+                  onChange={e => handleGenChange('employeeId', e.target.value)}
+                >
+                  <option value="">Select employee</option>
+                  {employees.filter(e => e.status === 'Active').map(emp => (
+                    <option key={emp.id} value={emp.id}>{emp.name} ({emp.id})</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="leave-form-group">
+                <label className="leave-form-label">Pay Period *</label>
+                <select
+                  className="leave-form-input"
+                  value={genForm.periodKey}
+                  onChange={e => handleGenChange('periodKey', e.target.value)}
+                >
+                  <option value="">Select period</option>
+                  {periods.map(p => (
+                    <option key={p.key} value={p.key}>{p.label}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="payroll-edit-live-preview" style={{ marginBottom: 16 }}>
+                <div className="payroll-edit-preview-row">
+                  <span>Gross Salary</span>
+                  <span className="payroll-edit-preview-value">{formatCurrency(genPreview.grossSalary)}</span>
+                </div>
+                <div className="payroll-edit-preview-row deduction">
+                  <span>Total Deductions</span>
+                  <span className="payroll-edit-preview-value">-{formatCurrency(genPreview.totalDeductions)}</span>
+                </div>
+                <div className="payroll-edit-preview-row net">
+                  <span>Net Salary</span>
+                  <span className="payroll-edit-preview-value">{formatCurrency(genPreview.netSalary)}</span>
+                </div>
+              </div>
+
+              <div className="payroll-edit-section-label">Earnings</div>
+              <div className="payroll-edit-grid">
+                <div className="leave-form-group">
+                  <label className="leave-form-label">Base Salary *</label>
+                  <input type="number" className="leave-form-input" value={genForm.baseSalary} onChange={e => handleGenChange('baseSalary', e.target.value)} />
+                </div>
+                <div className="leave-form-group">
+                  <label className="leave-form-label">HRA</label>
+                  <input type="number" className="leave-form-input" value={genForm.hra} onChange={e => handleGenChange('hra', e.target.value)} />
+                </div>
+                <div className="leave-form-group">
+                  <label className="leave-form-label">Transport</label>
+                  <input type="number" className="leave-form-input" value={genForm.transport} onChange={e => handleGenChange('transport', e.target.value)} />
+                </div>
+                <div className="leave-form-group">
+                  <label className="leave-form-label">Medical</label>
+                  <input type="number" className="leave-form-input" value={genForm.medical} onChange={e => handleGenChange('medical', e.target.value)} />
+                </div>
+                <div className="leave-form-group">
+                  <label className="leave-form-label">Special Allowance</label>
+                  <input type="number" className="leave-form-input" value={genForm.specialAllowance} onChange={e => handleGenChange('specialAllowance', e.target.value)} />
+                </div>
+                <div className="leave-form-group">
+                  <label className="leave-form-label">Bonus</label>
+                  <input type="number" className="leave-form-input" value={genForm.bonus} onChange={e => handleGenChange('bonus', e.target.value)} />
+                </div>
+                <div className="leave-form-group">
+                  <label className="leave-form-label">Overtime Pay</label>
+                  <input type="number" className="leave-form-input" value={genForm.overtimePay} onChange={e => handleGenChange('overtimePay', e.target.value)} />
+                </div>
+              </div>
+
+              <div className="payroll-edit-section-label deduction">Deductions</div>
+              <div className="payroll-edit-grid">
+                <div className="leave-form-group">
+                  <label className="leave-form-label">Income Tax</label>
+                  <input type="number" className="leave-form-input" value={genForm.incomeTax} onChange={e => handleGenChange('incomeTax', e.target.value)} />
+                </div>
+                <div className="leave-form-group">
+                  <label className="leave-form-label">PF</label>
+                  <input type="number" className="leave-form-input" value={genForm.pf} onChange={e => handleGenChange('pf', e.target.value)} />
+                </div>
+                <div className="leave-form-group">
+                  <label className="leave-form-label">Insurance</label>
+                  <input type="number" className="leave-form-input" value={genForm.insurance} onChange={e => handleGenChange('insurance', e.target.value)} />
+                </div>
+                <div className="leave-form-group">
+                  <label className="leave-form-label">Other Deductions</label>
+                  <input type="number" className="leave-form-input" value={genForm.otherDeductions} onChange={e => handleGenChange('otherDeductions', e.target.value)} />
+                </div>
+              </div>
+
+              {genError && (
+                <div style={{ color: 'var(--danger)', fontSize: '0.85rem', marginTop: 8, padding: '8px 12px', background: 'rgba(239, 68, 68, 0.1)', borderRadius: 8 }}>
+                  {genError}
                 </div>
               )}
-              {!generateConfirm && (
-                <div className="leave-form-actions" style={{ marginTop: 16 }}>
-                  <button className="btn btn-outline" onClick={() => { setGenerateModal(false); setGenerateTarget(null); }}>Close</button>
+
+              <div className="leave-form-actions">
+                <button className="btn btn-outline" onClick={() => setGenerateModal(false)}>Cancel</button>
+                <button className="btn btn-primary" onClick={handleGenerateSubmit}>
+                  <Check size={16} /> Generate Payroll
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {deleteConfirm && (
+        <div className="modal-overlay" onClick={() => setDeleteConfirm(null)}>
+          <div className="modal-content" style={{ maxWidth: 420 }} onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <div className="modal-header-left">
+                <Trash2 size={20} color="var(--danger)" />
+                <div>
+                  <h3>Delete Payroll Record</h3>
+                  <p className="modal-subtitle">This action cannot be undone</p>
                 </div>
-              )}
+              </div>
+              <button className="modal-close" onClick={() => setDeleteConfirm(null)}><X size={20} /></button>
+            </div>
+            <div className="modal-body">
+              <p style={{ color: 'var(--text-muted)', fontSize: '0.88rem', marginBottom: 16 }}>
+                Are you sure you want to delete the payroll record for <strong>{deleteConfirm.employeeName}</strong> ({deleteConfirm.period})?
+              </p>
+              <div className="leave-form-actions">
+                <button className="btn btn-outline" onClick={() => setDeleteConfirm(null)}>Cancel</button>
+                <button className="btn btn-primary" style={{ background: 'var(--danger)', borderColor: 'var(--danger)' }} onClick={handleDeleteConfirm}>
+                  <Trash2 size={16} /> Delete
+                </button>
+              </div>
             </div>
           </div>
         </div>

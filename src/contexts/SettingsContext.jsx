@@ -1,230 +1,219 @@
-import { createContext, useContext, useState, useCallback, useMemo, useEffect } from 'react';
+import { createContext, useContext, useState, useCallback, useEffect, useMemo } from 'react';
+import API from '../services/api';
 
 const SettingsContext = createContext(null);
 
-const STORAGE_KEY = 'dayflow-settings';
-
-const DEFAULT_SETTINGS = {
+const DEFAULTS = {
   company: {
-    logo: null,
-    name: 'Dayflow Inc.',
-    email: 'hr@dayflow.com',
-    phone: '+1 (555) 123-4567',
-    address: '123 Business Ave, San Francisco, CA 94102',
-    website: 'https://dayflow.com',
+    name: "Dayflow Inc.",
+    email: "info@dayflow.com",
+    phone: "+1 (555) 123-4567",
+    address: "123 Business Ave, Suite 100, San Francisco, CA 94105",
+    website: "https://dayflow.com",
+    logo: "",
   },
   attendance: {
-    startTime: '09:00',
-    endTime: '18:00',
+    startTime: "09:00",
+    endTime: "18:00",
+    lateThreshold: 15,
+    halfDayThreshold: 4,
+    workingHours: 8,
     gracePeriod: 15,
-    workingDays: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'],
-    overtime: true,
+    workingDays: ["Mon", "Tue", "Wed", "Thu", "Fri"],
+    overtimeEnabled: true,
     autoAbsent: false,
   },
   payroll: {
-    currency: 'USD ($)',
-    currencySymbol: '$',
-    cycle: 'Monthly',
-    taxPercent: 18,
+    currency: "USD",
+    currencySymbol: "$",
+    salaryCycle: "Monthly",
+    taxPercentage: 18,
+    pfPercentage: 12,
     overtimeRate: 1.5,
-    bonusPercent: 5,
-    generateDate: '28',
+    bonusPercentage: 5,
+    generateDay: 28,
   },
   leave: {
-    casual: 12,
-    sick: 8,
-    earned: 15,
-    maternity: 90,
-    paternity: 15,
+    casualLeave: 12,
+    sickLeave: 10,
+    earnedLeave: 15,
+    maternityLeave: 90,
+    paternityLeave: 15,
     managerApproval: true,
   },
   preferences: {
-    theme: 'dark',
-    language: 'English',
-    timezone: 'UTC+00:00',
-    emailNotif: true,
-    browserNotif: false,
+    theme: "dark",
+    language: "en",
+    timezone: "UTC+00:00",
+    dateFormat: "YYYY-MM-DD",
+    emailNotifications: true,
+    browserNotifications: false,
   },
   security: {
-    twoFactor: false,
+    twoFactorEnabled: false,
     sessionTimeout: 30,
     loginAlerts: true,
   },
 };
 
 const CURRENCY_MAP = {
-  'USD ($)': { symbol: '$', code: 'USD' },
-  'EUR (€)': { symbol: '€', code: 'EUR' },
-  'GBP (£)': { symbol: '£', code: 'GBP' },
-  'INR (₹)': { symbol: '₹', code: 'INR' },
-  'JPY (¥)': { symbol: '¥', code: 'JPY' },
-  'CAD (C$)': { symbol: 'C$', code: 'CAD' },
-  'AUD (A$)': { symbol: 'A$', code: 'AUD' },
+  USD: { symbol: "$", name: "US Dollar" },
+  EUR: { symbol: "€", name: "Euro" },
+  GBP: { symbol: "£", name: "British Pound" },
+  INR: { symbol: "₹", name: "Indian Rupee" },
+  JPY: { symbol: "¥", name: "Japanese Yen" },
+  CAD: { symbol: "CA$", name: "Canadian Dollar" },
+  AUD: { symbol: "A$", name: "Australian Dollar" },
 };
 
-function loadSettings() {
-  try {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored) {
-      const parsed = JSON.parse(stored);
-      return {
-        ...DEFAULT_SETTINGS,
-        ...parsed,
-        company: { ...DEFAULT_SETTINGS.company, ...parsed.company },
-        attendance: { ...DEFAULT_SETTINGS.attendance, ...parsed.attendance },
-        payroll: { ...DEFAULT_SETTINGS.payroll, ...parsed.payroll },
-        leave: { ...DEFAULT_SETTINGS.leave, ...parsed.leave },
-        preferences: { ...DEFAULT_SETTINGS.preferences, ...parsed.preferences },
-        security: { ...DEFAULT_SETTINGS.security, ...parsed.security },
-      };
-    }
-  } catch (e) {
-    console.warn('Failed to load settings from localStorage:', e);
-  }
-  return { ...DEFAULT_SETTINGS };
-}
-
-function saveSettings(settings) {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
-  } catch (e) {
-    console.warn('Failed to save settings to localStorage:', e);
-  }
-}
-
 export function SettingsProvider({ children }) {
-  const [settings, setSettings] = useState(loadSettings);
+  const [settings, setSettings] = useState(DEFAULTS);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  const fetchSettings = useCallback(async () => {
+    try {
+      setLoading(true);
+      const { data } = await API.get('/settings');
+      if (data.success) {
+        setSettings(data.settings);
+      }
+    } catch (error) {
+      console.error('Failed to fetch settings:', error);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
-    saveSettings(settings);
-  }, [settings]);
+    fetchSettings();
+  }, [fetchSettings]);
 
   useEffect(() => {
-    const root = document.documentElement;
-    if (settings.preferences.theme === 'dark') {
-      root.classList.remove('light-theme');
-    } else if (settings.preferences.theme === 'light') {
-      root.classList.add('light-theme');
+    const theme = settings.preferences?.theme || 'dark';
+    if (theme === 'dark') {
+      document.documentElement.classList.remove('light-theme');
+    } else if (theme === 'light') {
+      document.documentElement.classList.add('light-theme');
     } else {
       const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-      root.classList.toggle('light-theme', !prefersDark);
+      document.documentElement.classList.toggle('light-theme', !prefersDark);
     }
-  }, [settings.preferences.theme]);
+  }, [settings.preferences?.theme]);
 
-  const updateCompany = useCallback((updates) => {
-    setSettings(prev => ({
-      ...prev,
-      company: { ...prev.company, ...updates },
-    }));
-  }, []);
-
-  const updateAttendance = useCallback((updates) => {
-    setSettings(prev => ({
-      ...prev,
-      attendance: { ...prev.attendance, ...updates },
-    }));
-  }, []);
-
-  const updatePayroll = useCallback((updates) => {
-    setSettings(prev => {
-      const newPayroll = { ...prev.payroll, ...updates };
-      if (updates.currency && CURRENCY_MAP[updates.currency]) {
-        newPayroll.currencySymbol = CURRENCY_MAP[updates.currency].symbol;
+  const updateSection = useCallback(async (section, data) => {
+    try {
+      setSaving(true);
+      const { data: res } = await API.put(`/settings/${section}`, data);
+      if (res.success) {
+        setSettings(prev => ({ ...prev, [section]: res.data }));
+        return { success: true };
       }
-      return { ...prev, payroll: newPayroll };
-    });
+      return { success: false, message: res.message };
+    } catch (error) {
+      const msg = error.response?.data?.message || 'Failed to update settings';
+      return { success: false, message: msg };
+    } finally {
+      setSaving(false);
+    }
   }, []);
 
-  const updateLeave = useCallback((updates) => {
-    setSettings(prev => ({
-      ...prev,
-      leave: { ...prev.leave, ...updates },
-    }));
+  const updateCompany = useCallback((data) => updateSection('company', data), [updateSection]);
+  const updateAttendance = useCallback((data) => updateSection('attendance', data), [updateSection]);
+  const updatePayroll = useCallback((data) => updateSection('payroll', data), [updateSection]);
+  const updateLeave = useCallback((data) => updateSection('leave', data), [updateSection]);
+  const updatePreferences = useCallback((data) => updateSection('preferences', data), [updateSection]);
+  const updateSecurity = useCallback((data) => updateSection('security', data), [updateSection]);
+
+  const changePassword = useCallback(async (currentPassword, newPassword) => {
+    try {
+      setSaving(true);
+      const { data } = await API.post('/settings/change-password', { currentPassword, newPassword });
+      return data;
+    } catch (error) {
+      return { success: false, message: error.response?.data?.message || 'Failed to change password' };
+    } finally {
+      setSaving(false);
+    }
   }, []);
 
-  const updatePreferences = useCallback((updates) => {
-    setSettings(prev => ({
-      ...prev,
-      preferences: { ...prev.preferences, ...updates },
-    }));
+  const backupData = useCallback(async () => {
+    try {
+      const { data } = await API.post('/settings/backup');
+      return data;
+    } catch (error) {
+      return { success: false, message: error.response?.data?.message || 'Backup failed' };
+    }
   }, []);
 
-  const updateSecurity = useCallback((updates) => {
-    setSettings(prev => ({
-      ...prev,
-      security: { ...prev.security, ...updates },
-    }));
-  }, []);
+  const restoreData = useCallback(async (backup) => {
+    try {
+      setSaving(true);
+      const { data } = await API.post('/settings/restore', { backup });
+      if (data.success) {
+        await fetchSettings();
+      }
+      return data;
+    } catch (error) {
+      return { success: false, message: error.response?.data?.message || 'Restore failed' };
+    } finally {
+      setSaving(false);
+    }
+  }, [fetchSettings]);
 
-  const resetSettings = useCallback(() => {
-    setSettings({ ...DEFAULT_SETTINGS });
-    localStorage.removeItem(STORAGE_KEY);
+  const resetData = useCallback(async () => {
+    try {
+      setSaving(true);
+      const { data } = await API.post('/settings/reset', { confirm: true });
+      if (data.success) {
+        setSettings(DEFAULTS);
+      }
+      return data;
+    } catch (error) {
+      return { success: false, message: error.response?.data?.message || 'Reset failed' };
+    } finally {
+      setSaving(false);
+    }
   }, []);
 
   const formatCurrency = useCallback((amount) => {
-    if (amount == null) return '--';
-    const { currency } = settings.payroll;
-    const currencyInfo = CURRENCY_MAP[currency] || CURRENCY_MAP['USD ($)'];
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: currencyInfo.code,
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
-    }).format(amount);
-  }, [settings.payroll.currency]);
+    const symbol = settings.payroll?.currencySymbol || '$';
+    return `${symbol}${Number(amount || 0).toLocaleString()}`;
+  }, [settings.payroll?.currencySymbol]);
 
   const getCurrencySymbol = useCallback(() => {
-    const { currency } = settings.payroll;
-    return (CURRENCY_MAP[currency] || CURRENCY_MAP['USD ($)']).symbol;
-  }, [settings.payroll.currency]);
+    return settings.payroll?.currencySymbol || '$';
+  }, [settings.payroll?.currencySymbol]);
 
-  const isWorkingDay = useCallback((dayName) => {
-    return settings.attendance.workingDays.includes(dayName);
-  }, [settings.attendance.workingDays]);
-
-  const isLateArrival = useCallback((checkInTime) => {
-    if (!checkInTime) return false;
-    const [startH, startM] = settings.attendance.startTime.split(':').map(Number);
-    const [h, m] = checkInTime.split(':').map(Number);
-    const startMinutes = startH * 60 + startM + settings.attendance.gracePeriod;
-    const checkInMinutes = h * 60 + m;
-    return checkInMinutes > startMinutes;
-  }, [settings.attendance.startTime, settings.attendance.gracePeriod]);
-
-  const getLeaveBalance = useCallback(() => {
-    return {
-      'Casual Leave': settings.leave.casual,
-      'Sick Leave': settings.leave.sick,
-      'Earned Leave': settings.leave.earned,
-      'Maternity Leave': settings.leave.maternity,
-      'Paternity Leave': settings.leave.paternity,
-    };
-  }, [settings.leave]);
-
-  const contextValue = useMemo(() => ({
+  const value = useMemo(() => ({
     settings,
+    loading,
+    saving,
+    defaults: DEFAULTS,
+    currencyMap: CURRENCY_MAP,
+    updateSection,
     updateCompany,
     updateAttendance,
     updatePayroll,
     updateLeave,
     updatePreferences,
     updateSecurity,
-    resetSettings,
+    changePassword,
+    backupData,
+    restoreData,
+    resetData,
     formatCurrency,
     getCurrencySymbol,
-    isWorkingDay,
-    isLateArrival,
-    getLeaveBalance,
+    fetchSettings,
   }), [
-    settings,
+    settings, loading, saving, updateSection,
     updateCompany, updateAttendance, updatePayroll, updateLeave,
-    updatePreferences, updateSecurity, resetSettings,
-    formatCurrency, getCurrencySymbol, isWorkingDay, isLateArrival,
-    getLeaveBalance,
+    updatePreferences, updateSecurity, changePassword,
+    backupData, restoreData, resetData, formatCurrency, getCurrencySymbol, fetchSettings,
   ]);
 
   return (
-    <SettingsContext.Provider value={contextValue}>
+    <SettingsContext.Provider value={value}>
       {children}
     </SettingsContext.Provider>
   );

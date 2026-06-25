@@ -1,16 +1,16 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import {
-  Search, Filter, Eye, CheckCircle, Clock, MessageSquare,
+  Search, Filter, Eye, CheckCircle, Clock, XCircle,
   ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Trash2,
-  User, Mail, Phone, Building2, Calendar, Users, AlertTriangle, X
+  User, Mail, Phone, Building2, Calendar, Users, AlertTriangle, X, Loader2,
 } from 'lucide-react';
 import { useDemoRequests } from '../../contexts/DemoRequestContext';
 
 const STATUS_CONFIG = {
   Pending: { color: 'var(--warning)', icon: Clock, bg: 'rgba(245, 158, 11, 0.1)' },
-  Viewed: { color: 'var(--primary)', icon: Eye, bg: 'rgba(99, 102, 241, 0.1)' },
-  Contacted: { color: 'var(--success)', icon: CheckCircle, bg: 'rgba(16, 185, 129, 0.1)' },
-  Scheduled: { color: '#8b5cf6', icon: Calendar, bg: 'rgba(139, 92, 246, 0.1)' },
+  Approved: { color: 'var(--primary)', icon: CheckCircle, bg: 'rgba(99, 102, 241, 0.1)' },
+  Rejected: { color: 'var(--danger)', icon: XCircle, bg: 'rgba(239, 68, 68, 0.1)' },
+  Completed: { color: 'var(--success)', icon: CheckCircle, bg: 'rgba(16, 185, 129, 0.1)' },
 };
 
 function formatDate(dateStr) {
@@ -20,50 +20,42 @@ function formatDate(dateStr) {
 }
 
 export default function AdminDemoRequests() {
-  const { requests, markAsViewed, markAsContacted, markAsScheduled, deleteRequest, getStats } = useDemoRequests();
+  const { requests, stats, loading, fetchRequests, approveRequest, rejectRequest, completeRequest, deleteRequest } = useDemoRequests();
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState('all');
-  const [sortField, setSortField] = useState('submittedAt');
+  const [statusFilter, setStatusFilter] = useState('All');
+  const [sortField, setSortField] = useState('createdAt');
   const [sortDir, setSortDir] = useState('desc');
   const [page, setPage] = useState(1);
   const [detailRequest, setDetailRequest] = useState(null);
-  const [activeTab, setActiveTab] = useState('all');
+  const [activeTab, setActiveTab] = useState('All');
   const [deleteConfirm, setDeleteConfirm] = useState(null);
+  const [actionNote, setActionNote] = useState('');
   const perPage = 10;
 
-  const stats = useMemo(() => getStats(), [requests]);
+  useEffect(() => {
+    const params = {};
+    if (search) params.search = search;
+    if (activeTab !== 'All') params.status = activeTab;
+    params.sortBy = sortField;
+    params.sortOrder = sortDir;
+    params.page = page;
+    params.limit = perPage;
+    fetchRequests(params);
+  }, [search, activeTab, sortField, sortDir, page, fetchRequests]);
 
   const filtered = useMemo(() => {
     let recs = [...requests];
-
-    if (activeTab !== 'all') {
-      recs = recs.filter(r => r.status === activeTab.charAt(0).toUpperCase() + activeTab.slice(1));
-    }
-
     if (search) {
       const q = search.toLowerCase();
       recs = recs.filter(r =>
         r.fullName?.toLowerCase().includes(q) ||
-        r.companyName?.toLowerCase().includes(q) ||
+        r.company?.toLowerCase().includes(q) ||
         r.email?.toLowerCase().includes(q)
       );
     }
-    if (statusFilter !== 'all') recs = recs.filter(r => r.status === statusFilter);
-
-    recs.sort((a, b) => {
-      let cmp = 0;
-      if (sortField === 'fullName') cmp = (a.fullName || '').localeCompare(b.fullName || '');
-      else if (sortField === 'companyName') cmp = (a.companyName || '').localeCompare(b.companyName || '');
-      else if (sortField === 'submittedAt') cmp = (a.submittedAt || '').localeCompare(b.submittedAt || '');
-      else if (sortField === 'status') cmp = (a.status || '').localeCompare(b.status || '');
-      return sortDir === 'desc' ? -cmp : cmp;
-    });
-
+    if (statusFilter !== 'All') recs = recs.filter(r => r.status === statusFilter);
     return recs;
-  }, [requests, search, statusFilter, sortField, sortDir, activeTab]);
-
-  const totalPages = Math.ceil(filtered.length / perPage);
-  const paginated = filtered.slice((page - 1) * perPage, page * perPage);
+  }, [requests, search, statusFilter]);
 
   const toggleSort = (field) => {
     if (sortField === field) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
@@ -75,16 +67,45 @@ export default function AdminDemoRequests() {
     return sortDir === 'desc' ? <ChevronDown size={14} /> : <ChevronUp size={14} />;
   };
 
-  const handleView = (req) => {
-    if (req.status === 'Pending') markAsViewed(req.id);
-    setDetailRequest(req);
+  const handleApprove = async (id) => {
+    const res = await approveRequest(id, actionNote);
+    if (res.success) {
+      setDetailRequest(prev => prev ? { ...prev, status: 'Approved' } : null);
+      setActionNote('');
+    }
   };
 
-  const handleDelete = (id) => {
-    deleteRequest(id);
-    setDeleteConfirm(null);
-    setDetailRequest(null);
+  const handleReject = async (id) => {
+    const res = await rejectRequest(id, actionNote);
+    if (res.success) {
+      setDetailRequest(prev => prev ? { ...prev, status: 'Rejected' } : null);
+      setActionNote('');
+    }
   };
+
+  const handleComplete = async (id) => {
+    const res = await completeRequest(id, actionNote);
+    if (res.success) {
+      setDetailRequest(prev => prev ? { ...prev, status: 'Completed' } : null);
+      setActionNote('');
+    }
+  };
+
+  const handleDelete = async (id) => {
+    const res = await deleteRequest(id);
+    if (res.success) {
+      setDeleteConfirm(null);
+      setDetailRequest(null);
+    }
+  };
+
+  const TABS = [
+    { key: 'All', label: 'All', count: stats.total },
+    { key: 'Pending', label: 'Pending', count: stats.pending },
+    { key: 'Approved', label: 'Approved', count: stats.approved },
+    { key: 'Rejected', label: 'Rejected', count: stats.rejected },
+    { key: 'Completed', label: 'Completed', count: stats.completed },
+  ];
 
   return (
     <div className="leave-page">
@@ -96,42 +117,23 @@ export default function AdminDemoRequests() {
       </div>
 
       <div className="leave-dashboard-cards">
-        <div className="leave-stat-card" onClick={() => setActiveTab('all')} style={{ cursor: 'pointer' }}>
-          <div className="leave-stat-icon" style={{ background: 'rgba(99, 102, 241, 0.1)', color: 'var(--primary)' }}>
-            <Users size={22} />
-          </div>
-          <div className="leave-stat-info">
-            <span className="leave-stat-value">{stats.total}</span>
-            <span className="leave-stat-label">Total Requests</span>
-          </div>
-        </div>
-        <div className="leave-stat-card" onClick={() => setActiveTab('pending')} style={{ cursor: 'pointer' }}>
-          <div className="leave-stat-icon" style={{ background: 'rgba(245, 158, 11, 0.1)', color: 'var(--warning)' }}>
-            <Clock size={22} />
-          </div>
-          <div className="leave-stat-info">
-            <span className="leave-stat-value">{stats.pending}</span>
-            <span className="leave-stat-label">Pending</span>
-          </div>
-        </div>
-        <div className="leave-stat-card" onClick={() => setActiveTab('contacted')} style={{ cursor: 'pointer' }}>
-          <div className="leave-stat-icon" style={{ background: 'rgba(16, 185, 129, 0.1)', color: 'var(--success)' }}>
-            <CheckCircle size={22} />
-          </div>
-          <div className="leave-stat-info">
-            <span className="leave-stat-value">{stats.contacted}</span>
-            <span className="leave-stat-label">Contacted</span>
-          </div>
-        </div>
-        <div className="leave-stat-card" onClick={() => setActiveTab('scheduled')} style={{ cursor: 'pointer' }}>
-          <div className="leave-stat-icon" style={{ background: 'rgba(139, 92, 246, 0.1)', color: '#8b5cf6' }}>
-            <Calendar size={22} />
-          </div>
-          <div className="leave-stat-info">
-            <span className="leave-stat-value">{stats.scheduled}</span>
-            <span className="leave-stat-label">Scheduled</span>
-          </div>
-        </div>
+        {TABS.map(tab => {
+          const iconMap = { All: Users, Pending: Clock, Approved: CheckCircle, Rejected: XCircle, Completed: CheckCircle };
+          const colorMap = { All: 'var(--primary)', Pending: 'var(--warning)', Approved: 'var(--primary)', Rejected: 'var(--danger)', Completed: 'var(--success)' };
+          const bgMap = { All: 'rgba(99, 102, 241, 0.1)', Pending: 'rgba(245, 158, 11, 0.1)', Approved: 'rgba(99, 102, 241, 0.1)', Rejected: 'rgba(239, 68, 68, 0.1)', Completed: 'rgba(16, 185, 129, 0.1)' };
+          const Icon = iconMap[tab.key];
+          return (
+            <div key={tab.key} className="leave-stat-card" onClick={() => { setActiveTab(tab.key); setStatusFilter(tab.key); setPage(1); }} style={{ cursor: 'pointer' }}>
+              <div className="leave-stat-icon" style={{ background: bgMap[tab.key], color: colorMap[tab.key] }}>
+                <Icon size={22} />
+              </div>
+              <div className="leave-stat-info">
+                <span className="leave-stat-value">{tab.count}</span>
+                <span className="leave-stat-label">{tab.label}</span>
+              </div>
+            </div>
+          );
+        })}
       </div>
 
       <div className="leave-filters">
@@ -141,91 +143,87 @@ export default function AdminDemoRequests() {
         </div>
         <div className="leave-filter-group">
           <Filter size={16} />
-          <select value={statusFilter} onChange={e => { setStatusFilter(e.target.value); setPage(1); }}>
-            <option value="all">All Status</option>
+          <select value={statusFilter} onChange={e => { setStatusFilter(e.target.value); setActiveTab(e.target.value); setPage(1); }}>
+            <option value="All">All Status</option>
             <option value="Pending">Pending</option>
-            <option value="Viewed">Viewed</option>
-            <option value="Contacted">Contacted</option>
-            <option value="Scheduled">Scheduled</option>
+            <option value="Approved">Approved</option>
+            <option value="Rejected">Rejected</option>
+            <option value="Completed">Completed</option>
           </select>
         </div>
       </div>
 
       <div className="leave-tabs" style={{ marginBottom: 16 }}>
-        {['all', 'pending', 'viewed', 'contacted', 'scheduled'].map(tab => (
-          <button key={tab} className={`leave-tab ${activeTab === tab ? 'active' : ''}`}
-            onClick={() => { setActiveTab(tab); setPage(1); }}>
-            {tab.charAt(0).toUpperCase() + tab.slice(1)}
-            <span className="leave-tab-count">
-              {tab === 'all' ? requests.length : requests.filter(r => r.status === tab.charAt(0).toUpperCase() + tab.slice(1)).length}
-            </span>
+        {TABS.map(tab => (
+          <button key={tab.key} className={`leave-tab ${activeTab === tab.key ? 'active' : ''}`}
+            onClick={() => { setActiveTab(tab.key); setStatusFilter(tab.key); setPage(1); }}>
+            {tab.label}
+            <span className="leave-tab-count">{tab.count}</span>
           </button>
         ))}
       </div>
 
-      <div className="leave-table-container">
-        <table className="leave-table">
-          <thead>
-            <tr>
-              <th onClick={() => toggleSort('fullName')} style={{ cursor: 'pointer' }}>Name <SortIcon field="fullName" /></th>
-              <th onClick={() => toggleSort('companyName')} style={{ cursor: 'pointer' }}>Company <SortIcon field="companyName" /></th>
-              <th>Email</th>
-              <th>Phone</th>
-              <th onClick={() => toggleSort('status')} style={{ cursor: 'pointer' }}>Status <SortIcon field="status" /></th>
-              <th onClick={() => toggleSort('submittedAt')} style={{ cursor: 'pointer' }}>Submitted <SortIcon field="submittedAt" /></th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {paginated.length === 0 ? (
+      {loading ? (
+        <div style={{ display: 'flex', justifyContent: 'center', padding: 40 }}>
+          <Loader2 size={24} className="spin" style={{ color: 'var(--text-muted)' }} />
+        </div>
+      ) : (
+        <div className="leave-table-container">
+          <table className="leave-table">
+            <thead>
               <tr>
-                <td colSpan={7} style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--text-muted)' }}>
-                  No demo requests found
-                </td>
+                <th onClick={() => toggleSort('fullName')} style={{ cursor: 'pointer' }}>Name <SortIcon field="fullName" /></th>
+                <th onClick={() => toggleSort('company')} style={{ cursor: 'pointer' }}>Company <SortIcon field="company" /></th>
+                <th>Email</th>
+                <th>Phone</th>
+                <th onClick={() => toggleSort('status')} style={{ cursor: 'pointer' }}>Status <SortIcon field="status" /></th>
+                <th onClick={() => toggleSort('createdAt')} style={{ cursor: 'pointer' }}>Submitted <SortIcon field="createdAt" /></th>
+                <th>Actions</th>
               </tr>
-            ) : paginated.map(req => {
-              const StatusIcon = STATUS_CONFIG[req.status]?.icon || Clock;
-              const statusCfg = STATUS_CONFIG[req.status] || STATUS_CONFIG.Pending;
-              return (
-                <tr key={req.id}>
-                  <td style={{ fontWeight: 600 }}>{req.fullName}</td>
-                  <td>{req.companyName}</td>
-                  <td style={{ color: 'var(--text-muted)' }}>{req.email}</td>
-                  <td style={{ color: 'var(--text-muted)' }}>{req.phone || '--'}</td>
-                  <td>
-                    <span className="leave-status-badge" style={{ color: statusCfg.color, background: statusCfg.bg }}>
-                      <StatusIcon size={12} /> {req.status}
-                    </span>
-                  </td>
-                  <td style={{ color: 'var(--text-muted)', fontSize: '0.82rem' }}>{formatDate(req.submittedAt)}</td>
-                  <td>
-                    <div style={{ display: 'flex', gap: 6 }}>
-                      <button className="btn btn-outline" style={{ padding: '4px 10px', fontSize: '0.78rem' }} onClick={() => handleView(req)}>
-                        <Eye size={12} /> View
-                      </button>
-                      <button className="btn btn-outline" style={{ padding: '4px 10px', fontSize: '0.78rem', color: 'var(--danger)', borderColor: 'var(--danger)' }}
-                        onClick={() => setDeleteConfirm(req)}>
-                        <Trash2 size={12} />
-                      </button>
-                    </div>
+            </thead>
+            <tbody>
+              {filtered.length === 0 ? (
+                <tr>
+                  <td colSpan={7} style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--text-muted)' }}>
+                    No demo requests found
                   </td>
                 </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-
-      {totalPages > 1 && (
-        <div className="leave-pagination">
-          <button disabled={page === 1} onClick={() => setPage(p => p - 1)}><ChevronLeft size={16} /></button>
-          <span>Page {page} of {totalPages}</span>
-          <button disabled={page === totalPages} onClick={() => setPage(p => p + 1)}><ChevronRight size={16} /></button>
+              ) : filtered.map(req => {
+                const StatusIcon = STATUS_CONFIG[req.status]?.icon || Clock;
+                const statusCfg = STATUS_CONFIG[req.status] || STATUS_CONFIG.Pending;
+                return (
+                  <tr key={req._id}>
+                    <td style={{ fontWeight: 600 }}>{req.fullName}</td>
+                    <td>{req.company || '--'}</td>
+                    <td style={{ color: 'var(--text-muted)' }}>{req.email}</td>
+                    <td style={{ color: 'var(--text-muted)' }}>{req.phone || '--'}</td>
+                    <td>
+                      <span className="leave-status-badge" style={{ color: statusCfg.color, background: statusCfg.bg }}>
+                        <StatusIcon size={12} /> {req.status}
+                      </span>
+                    </td>
+                    <td style={{ color: 'var(--text-muted)', fontSize: '0.82rem' }}>{formatDate(req.createdAt)}</td>
+                    <td>
+                      <div style={{ display: 'flex', gap: 6 }}>
+                        <button className="btn btn-outline" style={{ padding: '4px 10px', fontSize: '0.78rem' }} onClick={() => setDetailRequest(req)}>
+                          <Eye size={12} /> View
+                        </button>
+                        <button className="btn btn-outline" style={{ padding: '4px 10px', fontSize: '0.78rem', color: 'var(--danger)', borderColor: 'var(--danger)' }}
+                          onClick={() => setDeleteConfirm(req)}>
+                          <Trash2 size={12} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
       )}
 
       {detailRequest && (
-        <div className="modal-overlay" onClick={() => setDetailRequest(null)}>
+        <div className="modal-overlay" onClick={() => { setDetailRequest(null); setActionNote(''); }}>
           <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: 520 }}>
             <div className="modal-header">
               <div className="modal-header-left">
@@ -234,10 +232,10 @@ export default function AdminDemoRequests() {
                 </div>
                 <div>
                   <h3>{detailRequest.fullName}</h3>
-                  <p className="modal-subtitle">{detailRequest.companyName}</p>
+                  <p className="modal-subtitle">{detailRequest.company || 'No company'}</p>
                 </div>
               </div>
-              <button className="modal-close" onClick={() => setDetailRequest(null)}><X size={20} /></button>
+              <button className="modal-close" onClick={() => { setDetailRequest(null); setActionNote(''); }}><X size={20} /></button>
             </div>
             <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
@@ -273,7 +271,7 @@ export default function AdminDemoRequests() {
                 </div>
                 <div className="detail-field">
                   <label style={{ fontSize: '0.78rem', color: 'var(--text-dim)', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <MessageSquare size={12} /> Message
+                    Message
                   </label>
                   <span style={{ fontSize: '0.9rem', color: detailRequest.message ? 'white' : 'var(--text-dim)' }}>
                     {detailRequest.message || 'No message'}
@@ -281,17 +279,37 @@ export default function AdminDemoRequests() {
                 </div>
               </div>
 
+              {detailRequest.statusNote && (
+                <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid var(--border-color)', borderRadius: 8, padding: 12 }}>
+                  <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Note: {detailRequest.statusNote}</span>
+                </div>
+              )}
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <textarea
+                  style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid var(--border-color)', color: 'white', borderRadius: 8, padding: '8px 12px', fontSize: '0.85rem', fontFamily: 'inherit', resize: 'vertical', minHeight: 60 }}
+                  placeholder="Add a note (optional)..."
+                  value={actionNote}
+                  onChange={e => setActionNote(e.target.value)}
+                />
+              </div>
+
               <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: 12, display: 'flex', gap: 8, justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>Submitted {formatDate(detailRequest.submittedAt)}</span>
-                <div style={{ display: 'flex', gap: 8 }}>
-                  {detailRequest.status !== 'Contacted' && (
-                    <button className="btn btn-primary" style={{ padding: '8px 14px', fontSize: '0.82rem' }} onClick={() => { markAsContacted(detailRequest.id); setDetailRequest({ ...detailRequest, status: 'Contacted' }); }}>
-                      <CheckCircle size={14} /> Mark Contacted
-                    </button>
+                <span style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>Submitted {formatDate(detailRequest.createdAt)}</span>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  {detailRequest.status === 'Pending' && (
+                    <>
+                      <button className="btn btn-primary" style={{ padding: '8px 14px', fontSize: '0.82rem' }} onClick={() => handleApprove(detailRequest._id)}>
+                        <CheckCircle size={14} /> Approve
+                      </button>
+                      <button className="btn btn-outline" style={{ padding: '8px 14px', fontSize: '0.82rem', color: 'var(--danger)', borderColor: 'var(--danger)' }} onClick={() => handleReject(detailRequest._id)}>
+                        <XCircle size={14} /> Reject
+                      </button>
+                    </>
                   )}
-                  {detailRequest.status !== 'Scheduled' && (
-                    <button className="btn btn-outline" style={{ padding: '8px 14px', fontSize: '0.82rem', borderColor: '#8b5cf6', color: '#8b5cf6' }} onClick={() => { markAsScheduled(detailRequest.id); setDetailRequest({ ...detailRequest, status: 'Scheduled' }); }}>
-                      <Calendar size={14} /> Schedule Demo
+                  {detailRequest.status === 'Approved' && (
+                    <button className="btn btn-primary" style={{ padding: '8px 14px', fontSize: '0.82rem', background: 'var(--success)' }} onClick={() => handleComplete(detailRequest._id)}>
+                      <CheckCircle size={14} /> Mark Completed
                     </button>
                   )}
                   <button className="btn btn-outline" style={{ padding: '8px 14px', fontSize: '0.82rem', color: 'var(--danger)', borderColor: 'var(--danger)' }} onClick={() => setDeleteConfirm(detailRequest)}>
@@ -314,7 +332,7 @@ export default function AdminDemoRequests() {
                 </div>
                 <div>
                   <h3>Delete Demo Request</h3>
-                  <p className="modal-subtitle">{deleteConfirm.fullName} at {deleteConfirm.companyName}</p>
+                  <p className="modal-subtitle">{deleteConfirm.fullName} at {deleteConfirm.company || 'No company'}</p>
                 </div>
               </div>
               <button className="modal-close" onClick={() => setDeleteConfirm(null)}><X size={20} /></button>
@@ -325,7 +343,7 @@ export default function AdminDemoRequests() {
               </p>
               <div className="leave-form-actions">
                 <button className="btn btn-outline" onClick={() => setDeleteConfirm(null)}>Cancel</button>
-                <button className="btn btn-danger" onClick={() => handleDelete(deleteConfirm.id)}>
+                <button className="btn btn-danger" onClick={() => handleDelete(deleteConfirm._id)}>
                   <Trash2 size={16} /> Delete Request
                 </button>
               </div>

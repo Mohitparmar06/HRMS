@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Save, Building2 } from 'lucide-react';
 import { useDepartments } from '../../contexts/DepartmentContext';
-import { employees as allEmployees } from '../../services/dummyData';
+import { useEmployees } from '../../contexts/EmployeeContext';
 
 const colorOptions = [
   { label: 'Blue', value: '#3b82f6' },
@@ -23,12 +23,13 @@ const initialForm = {
 export default function AddDepartment() {
   const navigate = useNavigate();
   const { addDepartment, getNextId } = useDepartments();
+  const { employees } = useEmployees();
   const [form, setForm] = useState(initialForm);
   const [errors, setErrors] = useState({});
 
   const nextId = getNextId();
 
-  const heads = [...new Set(allEmployees.map(e => e.name))].sort();
+  const heads = [...new Set(employees.map(e => e.name))].sort();
 
   const handleChange = (field, value) => {
     setForm(prev => ({ ...prev, [field]: value }));

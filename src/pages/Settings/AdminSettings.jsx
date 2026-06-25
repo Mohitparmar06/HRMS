@@ -1,6 +1,5 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { useSettings } from '../../contexts/SettingsContext';
-import { useNotifications } from '../../contexts/NotificationsContext';
 import {
   Settings, Building2, Clock, Wallet, Calendar, User, Shield, Database, Info,
   Save, Upload, Download, RefreshCw, Trash2, Eye, EyeOff, CheckCircle,
@@ -19,8 +18,25 @@ const SECTIONS = [
   { key: 'about', label: 'About', icon: Info },
 ];
 
-const CURRENCIES = ['USD ($)', 'EUR (€)', 'GBP (£)', 'INR (₹)', 'JPY (¥)', 'CAD (C$)', 'AUD (A$)'];
-const LANGUAGES = ['English', 'Spanish', 'French', 'German', 'Portuguese', 'Hindi', 'Japanese'];
+const CURRENCIES = [
+  { code: 'USD', label: 'USD ($)' },
+  { code: 'EUR', label: 'EUR (€)' },
+  { code: 'GBP', label: 'GBP (£)' },
+  { code: 'INR', label: 'INR (₹)' },
+  { code: 'JPY', label: 'JPY (¥)' },
+  { code: 'CAD', label: 'CAD (C$)' },
+  { code: 'AUD', label: 'AUD (A$)' },
+];
+const CURRENCY_SYMBOLS = { USD: '$', EUR: '€', GBP: '£', INR: '₹', JPY: '¥', CAD: 'C$', AUD: 'A$' };
+const LANGUAGES = [
+  { code: 'en', label: 'English' },
+  { code: 'es', label: 'Spanish' },
+  { code: 'fr', label: 'French' },
+  { code: 'de', label: 'German' },
+  { code: 'pt', label: 'Portuguese' },
+  { code: 'hi', label: 'Hindi' },
+  { code: 'ja', label: 'Japanese' },
+];
 const TIMEZONES = [
   'UTC-12:00', 'UTC-11:00', 'UTC-10:00', 'UTC-09:00', 'UTC-08:00',
   'UTC-07:00', 'UTC-06:00', 'UTC-05:00', 'UTC-04:00', 'UTC-03:00',
@@ -30,10 +46,10 @@ const TIMEZONES = [
 ];
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
-function Toast({ message, onClose }) {
+function Toast({ message, type = 'success', onClose }) {
   return (
-    <div className="settings-toast">
-      <CheckCircle size={16} />
+    <div className={`settings-toast ${type}`}>
+      {type === 'success' ? <CheckCircle size={16} /> : <AlertTriangle size={16} />}
       <span>{message}</span>
       <button onClick={onClose}><X size={14} /></button>
     </div>
@@ -103,147 +119,128 @@ function Toggle({ checked, onChange, label, description }) {
 
 export default function AdminSettings() {
   const {
-    settings, updateCompany, updateAttendance, updatePayroll, updateLeave,
-    updatePreferences, updateSecurity, resetSettings,
+    settings, loading, saving, updateCompany, updateAttendance, updatePayroll,
+    updateLeave, updatePreferences, updateSecurity, changePassword,
+    backupData, restoreData, resetData, fetchSettings,
   } = useSettings();
-  const { addNotification } = useNotifications();
 
   const [activeSection, setActiveSection] = useState('company');
   const [toast, setToast] = useState(null);
   const [confirmModal, setConfirmModal] = useState(null);
 
-  const [localCompany, setLocalCompany] = useState({ ...settings.company });
-  const [localAttendance, setLocalAttendance] = useState({ ...settings.attendance });
-  const [localPayroll, setLocalPayroll] = useState({ ...settings.payroll });
-  const [localLeave, setLocalLeave] = useState({ ...settings.leave });
-  const [localPreferences, setLocalPreferences] = useState({
-    ...settings.preferences,
-    currentPassword: '',
-    newPassword: '',
-    confirmPassword: '',
-  });
-  const [localSecurity, setLocalSecurity] = useState({ ...settings.security });
-  const [devices] = useState([
-    { id: 1, name: 'Chrome on Windows', ip: '192.168.1.105', lastActive: '2 min ago', current: true },
-    { id: 2, name: 'Safari on iPhone', ip: '10.0.0.42', lastActive: '3 hours ago', current: false },
-    { id: 3, name: 'Firefox on MacOS', ip: '172.16.0.88', lastActive: '1 day ago', current: false },
-  ]);
+  const [localCompany, setLocalCompany] = useState(settings.company);
+  const [localAttendance, setLocalAttendance] = useState(settings.attendance);
+  const [localPayroll, setLocalPayroll] = useState(settings.payroll);
+  const [localLeave, setLocalLeave] = useState(settings.leave);
+  const [localPreferences, setLocalPreferences] = useState(settings.preferences);
+  const [localSecurity, setLocalSecurity] = useState(settings.security);
 
-  const [showPassword, setShowPassword] = useState({ current: false, new: false, confirm: false });
+  const [passwordFields, setPasswordFields] = useState({ current: '', newPass: '', confirm: '' });
+  const [showPassword, setShowPassword] = useState({ current: false, newPass: false, confirm: false });
+
   const fileInputRef = useRef(null);
 
-  const showToast = useCallback((msg = 'Settings saved successfully!') => {
-    setToast(msg);
+  useEffect(() => {
+    if (!loading) {
+      setLocalCompany(settings.company);
+      setLocalAttendance(settings.attendance);
+      setLocalPayroll(settings.payroll);
+      setLocalLeave(settings.leave);
+      setLocalPreferences(settings.preferences);
+      setLocalSecurity(settings.security);
+    }
+  }, [loading, settings]);
+
+  const showToast = useCallback((msg, type = 'success') => {
+    setToast({ message: msg, type });
     setTimeout(() => setToast(null), 3000);
   }, []);
 
-  const addSettingsNotification = useCallback((title, description) => {
-    if (addNotification) {
-      addNotification({
-        id: Date.now(),
-        title,
-        description,
-        timestamp: new Date().toISOString(),
-        category: 'System',
-        priority: 'Medium',
-        read: false,
-        targetEmployeeId: null,
-      });
-    }
-  }, [addNotification]);
-
-  const handleSaveCompany = () => {
-    updateCompany(localCompany);
-    addSettingsNotification('Company settings updated', `Company name changed to "${localCompany.name}"`);
-    showToast('Company settings saved!');
+  const handleSaveCompany = async () => {
+    const res = await updateCompany(localCompany);
+    if (res.success) showToast('Company settings saved!');
+    else showToast(res.message, 'error');
   };
 
-  const handleSaveAttendance = () => {
-    updateAttendance(localAttendance);
-    addSettingsNotification('Attendance settings updated', `Office hours set to ${localAttendance.startTime} - ${localAttendance.endTime}`);
-    showToast('Attendance settings saved!');
+  const handleSaveAttendance = async () => {
+    const res = await updateAttendance(localAttendance);
+    if (res.success) showToast('Attendance settings saved!');
+    else showToast(res.message, 'error');
   };
 
-  const handleSavePayroll = () => {
-    updatePayroll(localPayroll);
-    addSettingsNotification('Payroll settings updated', `Currency set to ${localPayroll.currency}, tax rate: ${localPayroll.taxPercent}%`);
-    showToast('Payroll settings saved!');
+  const handleSavePayroll = async () => {
+    const res = await updatePayroll(localPayroll);
+    if (res.success) showToast('Payroll settings saved!');
+    else showToast(res.message, 'error');
   };
 
-  const handleSaveLeave = () => {
-    updateLeave(localLeave);
-    addSettingsNotification('Leave settings updated', `Leave limits updated - Casual: ${localLeave.casual}, Sick: ${localLeave.sick}`);
-    showToast('Leave settings saved!');
+  const handleSaveLeave = async () => {
+    const res = await updateLeave(localLeave);
+    if (res.success) showToast('Leave settings saved!');
+    else showToast(res.message, 'error');
   };
 
-  const handleSavePreferences = () => {
-    updatePreferences({
-      theme: localPreferences.theme,
-      language: localPreferences.language,
-      timezone: localPreferences.timezone,
-      emailNotif: localPreferences.emailNotif,
-      browserNotif: localPreferences.browserNotif,
-    });
-    showToast('Preferences saved!');
+  const handleSavePreferences = async () => {
+    const res = await updatePreferences(localPreferences);
+    if (res.success) showToast('Preferences saved!');
+    else showToast(res.message, 'error');
   };
 
-  const handleSaveSecurity = () => {
-    updateSecurity(localSecurity);
-    addSettingsNotification('Security settings updated', `2FA: ${localSecurity.twoFactor ? 'Enabled' : 'Disabled'}`);
-    showToast('Security settings saved!');
+  const handleSaveSecurity = async () => {
+    const res = await updateSecurity(localSecurity);
+    if (res.success) showToast('Security settings saved!');
+    else showToast(res.message, 'error');
   };
 
-  const handlePasswordChange = () => {
-    if (!localPreferences.currentPassword || !localPreferences.newPassword || !localPreferences.confirmPassword) {
-      showToast('Please fill in all password fields');
+  const handlePasswordChange = async () => {
+    if (!passwordFields.current || !passwordFields.newPass || !passwordFields.confirm) {
+      showToast('Please fill in all password fields', 'error');
       return;
     }
-    if (localPreferences.newPassword !== localPreferences.confirmPassword) {
-      showToast('New passwords do not match');
+    if (passwordFields.newPass !== passwordFields.confirm) {
+      showToast('New passwords do not match', 'error');
       return;
     }
-    if (localPreferences.newPassword.length < 8) {
-      showToast('Password must be at least 8 characters');
+    if (passwordFields.newPass.length < 8) {
+      showToast('Password must be at least 8 characters', 'error');
       return;
     }
-    setLocalPreferences(prev => ({ ...prev, currentPassword: '', newPassword: '', confirmPassword: '' }));
-    showToast('Password changed successfully!');
+    const res = await changePassword(passwordFields.current, passwordFields.newPass);
+    if (res.success) {
+      setPasswordFields({ current: '', newPass: '', confirm: '' });
+      showToast('Password changed successfully!');
+    } else {
+      showToast(res.message, 'error');
+    }
   };
 
-  const handleLogoClick = () => {
-    fileInputRef.current?.click();
-  };
+  const handleLogoClick = () => fileInputRef.current?.click();
 
   const handleLogoUpload = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
-
-    const validTypes = ['image/png', 'image/jpeg', 'image/jpg'];
-    if (!validTypes.includes(file.type)) {
-      showToast('Please select a PNG, JPG, or JPEG file');
+    if (!['image/png', 'image/jpeg', 'image/jpg'].includes(file.type)) {
+      showToast('Please select a PNG, JPG, or JPEG file', 'error');
       return;
     }
-
-    const maxSize = 5 * 1024 * 1024;
-    if (file.size > maxSize) {
-      showToast('File size must be less than 5MB');
+    if (file.size > 5 * 1024 * 1024) {
+      showToast('File size must be less than 5MB', 'error');
       return;
     }
-
     const reader = new FileReader();
     reader.onload = (event) => {
       const base64 = event.target.result;
       setLocalCompany(prev => ({ ...prev, logo: base64 }));
-      updateCompany({ logo: base64 });
-      showToast('Company logo uploaded successfully!');
+      updateCompany({ ...localCompany, logo: base64 });
+      showToast('Company logo uploaded!');
     };
     reader.readAsDataURL(file);
     e.target.value = '';
   };
 
   const handleRemoveLogo = () => {
-    setLocalCompany(prev => ({ ...prev, logo: null }));
-    updateCompany({ logo: null });
+    setLocalCompany(prev => ({ ...prev, logo: '' }));
+    updateCompany({ ...localCompany, logo: '' });
     showToast('Company logo removed');
   };
 
@@ -256,57 +253,67 @@ export default function AdminSettings() {
     }));
   };
 
-  const handleLogoutAll = () => {
-    setConfirmModal({
-      title: 'Logout All Devices',
-      message: 'This will sign you out from all other devices. You will need to sign in again on those devices.',
-      danger: false,
-      onConfirm: () => {
-        setConfirmModal(null);
-        showToast('Logged out from all other devices!');
-      },
-    });
-  };
-
-  const handleResetDemo = () => {
-    setConfirmModal({
-      title: 'Reset Demo Data',
-      message: 'This will reset all settings to default values. This action cannot be undone.',
-      danger: true,
-      onConfirm: () => {
-        resetSettings();
-        setLocalCompany({ ...settings.company });
-        setLocalAttendance({ ...settings.attendance });
-        setLocalPayroll({ ...settings.payroll });
-        setLocalLeave({ ...settings.leave });
-        setLocalPreferences({ ...settings.preferences, currentPassword: '', newPassword: '', confirmPassword: '' });
-        setLocalSecurity({ ...settings.security });
-        setConfirmModal(null);
-        showToast('Settings have been reset to defaults!');
-      },
-    });
-  };
-
-  const handleExport = (type) => {
-    showToast(`${type} data exported successfully!`);
-  };
-
-  const handleImport = () => {
-    showToast('Employee data imported successfully!');
-  };
-
-  const handleBackup = () => {
-    showToast('Database backup created successfully!');
+  const handleBackup = async () => {
+    const res = await backupData();
+    if (res.success) {
+      const blob = new Blob([JSON.stringify(res.backup, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `hrms-backup-${new Date().toISOString().slice(0, 10)}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      showToast('Backup downloaded successfully!');
+    } else {
+      showToast(res.message, 'error');
+    }
   };
 
   const handleRestore = () => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json';
+    input.onchange = async (e) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      try {
+        const text = await file.text();
+        const backup = JSON.parse(text);
+        setConfirmModal({
+          title: 'Restore Backup',
+          message: 'This will overwrite all current data. Are you sure?',
+          danger: true,
+          onConfirm: async () => {
+            setConfirmModal(null);
+            const res = await restoreData(backup);
+            if (res.success) {
+              await fetchSettings();
+              showToast('Data restored successfully!');
+            } else {
+              showToast(res.message, 'error');
+            }
+          },
+        });
+      } catch {
+        showToast('Invalid backup file', 'error');
+      }
+    };
+    input.click();
+  };
+
+  const handleReset = () => {
     setConfirmModal({
-      title: 'Restore Backup',
-      message: 'This will restore the database to the last backup. Current data will be overwritten.',
+      title: 'Reset All Data',
+      message: 'This will permanently delete ALL data (employees, attendance, leaves, payroll, notifications, settings). This cannot be undone.',
       danger: true,
-      onConfirm: () => {
+      onConfirm: async () => {
         setConfirmModal(null);
-        showToast('Database restored successfully!');
+        const res = await resetData();
+        if (res.success) {
+          showToast('All data has been reset!');
+        } else {
+          showToast(res.message, 'error');
+        }
       },
     });
   };
@@ -315,13 +322,7 @@ export default function AdminSettings() {
     <div className="settings-section">
       <SectionHeader icon={Building2} title="Company Settings" description="Manage your company information and branding" />
       <div className="settings-card">
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="image/png,image/jpeg,image/jpg"
-          onChange={handleLogoUpload}
-          style={{ display: 'none' }}
-        />
+        <input ref={fileInputRef} type="file" accept="image/png,image/jpeg,image/jpg" onChange={handleLogoUpload} style={{ display: 'none' }} />
         <div className="settings-logo-upload">
           <div className="settings-logo-preview" onClick={handleLogoClick} style={{ cursor: 'pointer' }}>
             {localCompany.logo ? (
@@ -363,8 +364,8 @@ export default function AdminSettings() {
           <textarea id="companyAddress" className="settings-textarea" rows={3} value={localCompany.address} onChange={e => setLocalCompany(p => ({ ...p, address: e.target.value }))} />
         </FormGroup>
         <div className="settings-actions">
-          <button className="settings-btn settings-btn-primary" onClick={handleSaveCompany}>
-            <Save size={15} /> Save Changes
+          <button className="settings-btn settings-btn-primary" onClick={handleSaveCompany} disabled={saving}>
+            <Save size={15} /> {saving ? 'Saving...' : 'Save Changes'}
           </button>
         </div>
       </div>
@@ -382,6 +383,15 @@ export default function AdminSettings() {
           <FormGroup label="Office End Time" required htmlFor="endTime">
             <input id="endTime" type="time" className="settings-input" value={localAttendance.endTime} onChange={e => setLocalAttendance(p => ({ ...p, endTime: e.target.value }))} />
           </FormGroup>
+          <FormGroup label="Late Threshold (minutes)" htmlFor="lateThreshold">
+            <input id="lateThreshold" type="number" className="settings-input" min={0} max={60} value={localAttendance.lateThreshold} onChange={e => setLocalAttendance(p => ({ ...p, lateThreshold: parseInt(e.target.value) || 0 }))} />
+          </FormGroup>
+          <FormGroup label="Half Day Threshold (hours)" htmlFor="halfDayThreshold">
+            <input id="halfDayThreshold" type="number" className="settings-input" min={0} max={8} step={0.5} value={localAttendance.halfDayThreshold} onChange={e => setLocalAttendance(p => ({ ...p, halfDayThreshold: parseFloat(e.target.value) || 0 }))} />
+          </FormGroup>
+          <FormGroup label="Working Hours" htmlFor="workingHours">
+            <input id="workingHours" type="number" className="settings-input" min={1} max={12} step={0.5} value={localAttendance.workingHours} onChange={e => setLocalAttendance(p => ({ ...p, workingHours: parseFloat(e.target.value) || 8 }))} />
+          </FormGroup>
           <FormGroup label="Grace Period (minutes)" htmlFor="gracePeriod">
             <input id="gracePeriod" type="number" className="settings-input" min={0} max={60} value={localAttendance.gracePeriod} onChange={e => setLocalAttendance(p => ({ ...p, gracePeriod: parseInt(e.target.value) || 0 }))} />
           </FormGroup>
@@ -389,33 +399,18 @@ export default function AdminSettings() {
         <FormGroup label="Working Days">
           <div className="settings-days-row">
             {DAYS.map(day => (
-              <button
-                key={day}
-                type="button"
-                className={`settings-day-btn ${localAttendance.workingDays.includes(day) ? 'active' : ''}`}
-                onClick={() => handleToggleDay(day)}
-              >
+              <button key={day} type="button" className={`settings-day-btn ${localAttendance.workingDays?.includes(day) ? 'active' : ''}`} onClick={() => handleToggleDay(day)}>
                 {day}
               </button>
             ))}
           </div>
         </FormGroup>
         <div className="settings-divider" />
-        <Toggle
-          label="Enable Overtime"
-          description="Allow employees to log overtime hours"
-          checked={localAttendance.overtime}
-          onChange={v => setLocalAttendance(p => ({ ...p, overtime: v }))}
-        />
-        <Toggle
-          label="Auto Mark Absent"
-          description="Automatically mark employees absent if no check-in by end of day"
-          checked={localAttendance.autoAbsent}
-          onChange={v => setLocalAttendance(p => ({ ...p, autoAbsent: v }))}
-        />
+        <Toggle label="Enable Overtime" description="Allow employees to log overtime hours" checked={localAttendance.overtimeEnabled} onChange={v => setLocalAttendance(p => ({ ...p, overtimeEnabled: v }))} />
+        <Toggle label="Auto Mark Absent" description="Automatically mark employees absent if no check-in by end of day" checked={localAttendance.autoAbsent} onChange={v => setLocalAttendance(p => ({ ...p, autoAbsent: v }))} />
         <div className="settings-actions">
-          <button className="settings-btn settings-btn-primary" onClick={handleSaveAttendance}>
-            <Save size={15} /> Save Settings
+          <button className="settings-btn settings-btn-primary" onClick={handleSaveAttendance} disabled={saving}>
+            <Save size={15} /> {saving ? 'Saving...' : 'Save Settings'}
           </button>
         </div>
       </div>
@@ -428,36 +423,43 @@ export default function AdminSettings() {
       <div className="settings-card">
         <div className="settings-form-grid">
           <FormGroup label="Currency" htmlFor="currency">
-            <select id="currency" className="settings-select" value={localPayroll.currency} onChange={e => setLocalPayroll(p => ({ ...p, currency: e.target.value }))}>
-              {CURRENCIES.map(c => <option key={c} value={c}>{c}</option>)}
+            <select id="currency" className="settings-select" value={localPayroll.currency} onChange={e => {
+              const code = e.target.value;
+              setLocalPayroll(p => ({ ...p, currency: code, currencySymbol: CURRENCY_SYMBOLS[code] || '$' }));
+            }}>
+              {CURRENCIES.map(c => <option key={c.code} value={c.code}>{c.label}</option>)}
             </select>
           </FormGroup>
           <FormGroup label="Salary Cycle" htmlFor="salaryCycle">
-            <select id="salaryCycle" className="settings-select" value={localPayroll.cycle} onChange={e => setLocalPayroll(p => ({ ...p, cycle: e.target.value }))}>
+            <select id="salaryCycle" className="settings-select" value={localPayroll.salaryCycle} onChange={e => setLocalPayroll(p => ({ ...p, salaryCycle: e.target.value }))}>
               <option value="Monthly">Monthly</option>
               <option value="Weekly">Weekly</option>
+              <option value="Bi-Weekly">Bi-Weekly</option>
             </select>
           </FormGroup>
-          <FormGroup label="Tax Percentage (%)" htmlFor="taxPercent">
-            <input id="taxPercent" type="number" className="settings-input" min={0} max={50} step={0.5} value={localPayroll.taxPercent} onChange={e => setLocalPayroll(p => ({ ...p, taxPercent: parseFloat(e.target.value) || 0 }))} />
+          <FormGroup label="Tax Percentage (%)" htmlFor="taxPercentage">
+            <input id="taxPercentage" type="number" className="settings-input" min={0} max={50} step={0.5} value={localPayroll.taxPercentage} onChange={e => setLocalPayroll(p => ({ ...p, taxPercentage: parseFloat(e.target.value) || 0 }))} />
+          </FormGroup>
+          <FormGroup label="PF Percentage (%)" htmlFor="pfPercentage">
+            <input id="pfPercentage" type="number" className="settings-input" min={0} max={30} step={0.5} value={localPayroll.pfPercentage} onChange={e => setLocalPayroll(p => ({ ...p, pfPercentage: parseFloat(e.target.value) || 0 }))} />
           </FormGroup>
           <FormGroup label="Overtime Rate (x)" htmlFor="overtimeRate">
             <input id="overtimeRate" type="number" className="settings-input" min={1} max={5} step={0.25} value={localPayroll.overtimeRate} onChange={e => setLocalPayroll(p => ({ ...p, overtimeRate: parseFloat(e.target.value) || 1 }))} />
           </FormGroup>
-          <FormGroup label="Bonus Percentage (%)" htmlFor="bonusPercent">
-            <input id="bonusPercent" type="number" className="settings-input" min={0} max={50} step={0.5} value={localPayroll.bonusPercent} onChange={e => setLocalPayroll(p => ({ ...p, bonusPercent: parseFloat(e.target.value) || 0 }))} />
+          <FormGroup label="Bonus Percentage (%)" htmlFor="bonusPercentage">
+            <input id="bonusPercentage" type="number" className="settings-input" min={0} max={50} step={0.5} value={localPayroll.bonusPercentage} onChange={e => setLocalPayroll(p => ({ ...p, bonusPercentage: parseFloat(e.target.value) || 0 }))} />
           </FormGroup>
-          <FormGroup label="Generate Payroll Date" htmlFor="generateDate">
-            <select id="generateDate" className="settings-select" value={localPayroll.generateDate} onChange={e => setLocalPayroll(p => ({ ...p, generateDate: e.target.value }))}>
+          <FormGroup label="Generate Payroll Day" htmlFor="generateDay">
+            <select id="generateDay" className="settings-select" value={localPayroll.generateDay} onChange={e => setLocalPayroll(p => ({ ...p, generateDay: parseInt(e.target.value) }))}>
               {Array.from({ length: 28 }, (_, i) => (
-                <option key={i + 1} value={String(i + 1)}>{i + 1}{i === 0 ? 'st' : i === 1 ? 'nd' : i === 2 ? 'rd' : 'th'} of each month</option>
+                <option key={i + 1} value={i + 1}>{i + 1}{i === 0 ? 'st' : i === 1 ? 'nd' : i === 2 ? 'rd' : 'th'} of each month</option>
               ))}
             </select>
           </FormGroup>
         </div>
         <div className="settings-actions">
-          <button className="settings-btn settings-btn-primary" onClick={handleSavePayroll}>
-            <Save size={15} /> Save Settings
+          <button className="settings-btn settings-btn-primary" onClick={handleSavePayroll} disabled={saving}>
+            <Save size={15} /> {saving ? 'Saving...' : 'Save Settings'}
           </button>
         </div>
       </div>
@@ -470,31 +472,26 @@ export default function AdminSettings() {
       <div className="settings-card">
         <div className="settings-form-grid">
           <FormGroup label="Casual Leave (days/year)" htmlFor="casualLeave">
-            <input id="casualLeave" type="number" className="settings-input" min={0} max={30} value={localLeave.casual} onChange={e => setLocalLeave(p => ({ ...p, casual: parseInt(e.target.value) || 0 }))} />
+            <input id="casualLeave" type="number" className="settings-input" min={0} max={30} value={localLeave.casualLeave} onChange={e => setLocalLeave(p => ({ ...p, casualLeave: parseInt(e.target.value) || 0 }))} />
           </FormGroup>
           <FormGroup label="Sick Leave (days/year)" htmlFor="sickLeave">
-            <input id="sickLeave" type="number" className="settings-input" min={0} max={30} value={localLeave.sick} onChange={e => setLocalLeave(p => ({ ...p, sick: parseInt(e.target.value) || 0 }))} />
+            <input id="sickLeave" type="number" className="settings-input" min={0} max={30} value={localLeave.sickLeave} onChange={e => setLocalLeave(p => ({ ...p, sickLeave: parseInt(e.target.value) || 0 }))} />
           </FormGroup>
           <FormGroup label="Earned Leave (days/year)" htmlFor="earnedLeave">
-            <input id="earnedLeave" type="number" className="settings-input" min={0} max={30} value={localLeave.earned} onChange={e => setLocalLeave(p => ({ ...p, earned: parseInt(e.target.value) || 0 }))} />
+            <input id="earnedLeave" type="number" className="settings-input" min={0} max={30} value={localLeave.earnedLeave} onChange={e => setLocalLeave(p => ({ ...p, earnedLeave: parseInt(e.target.value) || 0 }))} />
           </FormGroup>
           <FormGroup label="Maternity Leave (days)" htmlFor="maternityLeave">
-            <input id="maternityLeave" type="number" className="settings-input" min={0} max={180} value={localLeave.maternity} onChange={e => setLocalLeave(p => ({ ...p, maternity: parseInt(e.target.value) || 0 }))} />
+            <input id="maternityLeave" type="number" className="settings-input" min={0} max={180} value={localLeave.maternityLeave} onChange={e => setLocalLeave(p => ({ ...p, maternityLeave: parseInt(e.target.value) || 0 }))} />
           </FormGroup>
           <FormGroup label="Paternity Leave (days)" htmlFor="paternityLeave">
-            <input id="paternityLeave" type="number" className="settings-input" min={0} max={30} value={localLeave.paternity} onChange={e => setLocalLeave(p => ({ ...p, paternity: parseInt(e.target.value) || 0 }))} />
+            <input id="paternityLeave" type="number" className="settings-input" min={0} max={30} value={localLeave.paternityLeave} onChange={e => setLocalLeave(p => ({ ...p, paternityLeave: parseInt(e.target.value) || 0 }))} />
           </FormGroup>
         </div>
         <div className="settings-divider" />
-        <Toggle
-          label="Require Manager Approval"
-          description="All leave requests must be approved by a manager before being processed"
-          checked={localLeave.managerApproval}
-          onChange={v => setLocalLeave(p => ({ ...p, managerApproval: v }))}
-        />
+        <Toggle label="Require Manager Approval" description="All leave requests must be approved by a manager before being processed" checked={localLeave.managerApproval} onChange={v => setLocalLeave(p => ({ ...p, managerApproval: v }))} />
         <div className="settings-actions">
-          <button className="settings-btn settings-btn-primary" onClick={handleSaveLeave}>
-            <Save size={15} /> Save Settings
+          <button className="settings-btn settings-btn-primary" onClick={handleSaveLeave} disabled={saving}>
+            <Save size={15} /> {saving ? 'Saving...' : 'Save Settings'}
           </button>
         </div>
       </div>
@@ -509,7 +506,7 @@ export default function AdminSettings() {
         <div className="settings-form-grid">
           <FormGroup label="Current Password" htmlFor="currentPassword">
             <div className="settings-input-group">
-              <input id="currentPassword" type={showPassword.current ? 'text' : 'password'} className="settings-input" value={localPreferences.currentPassword} onChange={e => setLocalPreferences(p => ({ ...p, currentPassword: e.target.value }))} placeholder="Enter current password" />
+              <input id="currentPassword" type={showPassword.current ? 'text' : 'password'} className="settings-input" value={passwordFields.current} onChange={e => setPasswordFields(p => ({ ...p, current: e.target.value }))} placeholder="Enter current password" />
               <button type="button" className="settings-input-icon" onClick={() => setShowPassword(p => ({ ...p, current: !p.current }))}>
                 {showPassword.current ? <EyeOff size={16} /> : <Eye size={16} />}
               </button>
@@ -517,15 +514,15 @@ export default function AdminSettings() {
           </FormGroup>
           <FormGroup label="New Password" htmlFor="newPassword">
             <div className="settings-input-group">
-              <input id="newPassword" type={showPassword.new ? 'text' : 'password'} className="settings-input" value={localPreferences.newPassword} onChange={e => setLocalPreferences(p => ({ ...p, newPassword: e.target.value }))} placeholder="Enter new password" />
-              <button type="button" className="settings-input-icon" onClick={() => setShowPassword(p => ({ ...p, new: !p.new }))}>
-                {showPassword.new ? <EyeOff size={16} /> : <Eye size={16} />}
+              <input id="newPassword" type={showPassword.newPass ? 'text' : 'password'} className="settings-input" value={passwordFields.newPass} onChange={e => setPasswordFields(p => ({ ...p, newPass: e.target.value }))} placeholder="Enter new password" />
+              <button type="button" className="settings-input-icon" onClick={() => setShowPassword(p => ({ ...p, newPass: !p.newPass }))}>
+                {showPassword.newPass ? <EyeOff size={16} /> : <Eye size={16} />}
               </button>
             </div>
           </FormGroup>
           <FormGroup label="Confirm New Password" htmlFor="confirmPassword">
             <div className="settings-input-group">
-              <input id="confirmPassword" type={showPassword.confirm ? 'text' : 'password'} className="settings-input" value={localPreferences.confirmPassword} onChange={e => setLocalPreferences(p => ({ ...p, confirmPassword: e.target.value }))} placeholder="Confirm new password" />
+              <input id="confirmPassword" type={showPassword.confirm ? 'text' : 'password'} className="settings-input" value={passwordFields.confirm} onChange={e => setPasswordFields(p => ({ ...p, confirm: e.target.value }))} placeholder="Confirm new password" />
               <button type="button" className="settings-input-icon" onClick={() => setShowPassword(p => ({ ...p, confirm: !p.confirm }))}>
                 {showPassword.confirm ? <EyeOff size={16} /> : <Eye size={16} />}
               </button>
@@ -533,8 +530,8 @@ export default function AdminSettings() {
           </FormGroup>
         </div>
         <div className="settings-actions">
-          <button className="settings-btn settings-btn-primary" onClick={handlePasswordChange}>
-            <Lock size={15} /> Update Password
+          <button className="settings-btn settings-btn-primary" onClick={handlePasswordChange} disabled={saving}>
+            <Lock size={15} /> {saving ? 'Updating...' : 'Update Password'}
           </button>
         </div>
         <div className="settings-divider" />
@@ -546,12 +543,7 @@ export default function AdminSettings() {
               { key: 'light', label: 'Light', icon: Sun },
               { key: 'system', label: 'System', icon: Laptop },
             ].map(t => (
-              <button
-                key={t.key}
-                type="button"
-                className={`settings-theme-btn ${localPreferences.theme === t.key ? 'active' : ''}`}
-                onClick={() => setLocalPreferences(p => ({ ...p, theme: t.key }))}
-              >
+              <button key={t.key} type="button" className={`settings-theme-btn ${localPreferences.theme === t.key ? 'active' : ''}`} onClick={() => setLocalPreferences(p => ({ ...p, theme: t.key }))}>
                 <t.icon size={18} />
                 <span>{t.label}</span>
               </button>
@@ -561,7 +553,7 @@ export default function AdminSettings() {
         <div className="settings-form-grid">
           <FormGroup label="Language" htmlFor="language">
             <select id="language" className="settings-select" value={localPreferences.language} onChange={e => setLocalPreferences(p => ({ ...p, language: e.target.value }))}>
-              {LANGUAGES.map(l => <option key={l} value={l}>{l}</option>)}
+              {LANGUAGES.map(l => <option key={l.code} value={l.code}>{l.label}</option>)}
             </select>
           </FormGroup>
           <FormGroup label="Time Zone" htmlFor="timezone">
@@ -569,24 +561,22 @@ export default function AdminSettings() {
               {TIMEZONES.map(t => <option key={t} value={t}>{t}</option>)}
             </select>
           </FormGroup>
+          <FormGroup label="Date Format" htmlFor="dateFormat">
+            <select id="dateFormat" className="settings-select" value={localPreferences.dateFormat} onChange={e => setLocalPreferences(p => ({ ...p, dateFormat: e.target.value }))}>
+              <option value="YYYY-MM-DD">YYYY-MM-DD</option>
+              <option value="DD/MM/YYYY">DD/MM/YYYY</option>
+              <option value="MM/DD/YYYY">MM/DD/YYYY</option>
+              <option value="DD-MM-YYYY">DD-MM-YYYY</option>
+            </select>
+          </FormGroup>
         </div>
         <div className="settings-divider" />
         <h3 className="settings-card-title"><Bell size={16} /> Notifications</h3>
-        <Toggle
-          label="Email Notifications"
-          description="Receive email alerts for important updates"
-          checked={localPreferences.emailNotif}
-          onChange={v => setLocalPreferences(p => ({ ...p, emailNotif: v }))}
-        />
-        <Toggle
-          label="Browser Notifications"
-          description="Show desktop notifications in your browser"
-          checked={localPreferences.browserNotif}
-          onChange={v => setLocalPreferences(p => ({ ...p, browserNotif: v }))}
-        />
+        <Toggle label="Email Notifications" description="Receive email alerts for important updates" checked={localPreferences.emailNotifications} onChange={v => setLocalPreferences(p => ({ ...p, emailNotifications: v }))} />
+        <Toggle label="Browser Notifications" description="Show desktop notifications in your browser" checked={localPreferences.browserNotifications} onChange={v => setLocalPreferences(p => ({ ...p, browserNotifications: v }))} />
         <div className="settings-actions">
-          <button className="settings-btn settings-btn-primary" onClick={handleSavePreferences}>
-            <Save size={15} /> Save Preferences
+          <button className="settings-btn settings-btn-primary" onClick={handleSavePreferences} disabled={saving}>
+            <Save size={15} /> {saving ? 'Saving...' : 'Save Preferences'}
           </button>
         </div>
       </div>
@@ -597,59 +587,14 @@ export default function AdminSettings() {
     <div className="settings-section">
       <SectionHeader icon={Shield} title="Security Settings" description="Manage authentication and session security" />
       <div className="settings-card">
-        <Toggle
-          label="Two-Factor Authentication"
-          description="Add an extra layer of security to your account"
-          checked={localSecurity.twoFactor}
-          onChange={v => setLocalSecurity(p => ({ ...p, twoFactor: v }))}
-        />
+        <Toggle label="Two-Factor Authentication" description="Add an extra layer of security to your account" checked={localSecurity.twoFactorEnabled} onChange={v => setLocalSecurity(p => ({ ...p, twoFactorEnabled: v }))} />
         <FormGroup label="Session Timeout (minutes)" htmlFor="sessionTimeout">
           <input id="sessionTimeout" type="number" className="settings-input" min={5} max={480} value={localSecurity.sessionTimeout} onChange={e => setLocalSecurity(p => ({ ...p, sessionTimeout: parseInt(e.target.value) || 30 }))} style={{ maxWidth: 200 }} />
         </FormGroup>
-        <Toggle
-          label="Login Alerts"
-          description="Get notified when someone logs into your account"
-          checked={localSecurity.loginAlerts}
-          onChange={v => setLocalSecurity(p => ({ ...p, loginAlerts: v }))}
-        />
-        <div className="settings-divider" />
-        <div className="settings-devices-header">
-          <h3 className="settings-card-title"><Smartphone size={16} /> Active Devices</h3>
-          <button className="settings-btn settings-btn-danger settings-btn-sm" onClick={handleLogoutAll}>
-            <LogOut size={14} /> Logout All Devices
-          </button>
-        </div>
-        <div className="settings-devices-table">
-          <table>
-            <thead>
-              <tr>
-                <th>Device</th>
-                <th>IP Address</th>
-                <th>Last Active</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {devices.map(d => (
-                <tr key={d.id}>
-                  <td>{d.name}</td>
-                  <td><code>{d.ip}</code></td>
-                  <td>{d.lastActive}</td>
-                  <td>
-                    {d.current ? (
-                      <span className="settings-device-current"><CheckCircle size={13} /> Current</span>
-                    ) : (
-                      <span className="settings-device-other">Active</span>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <Toggle label="Login Alerts" description="Get notified when someone logs into your account" checked={localSecurity.loginAlerts} onChange={v => setLocalSecurity(p => ({ ...p, loginAlerts: v }))} />
         <div className="settings-actions">
-          <button className="settings-btn settings-btn-primary" onClick={handleSaveSecurity}>
-            <Save size={15} /> Save Security Settings
+          <button className="settings-btn settings-btn-primary" onClick={handleSaveSecurity} disabled={saving}>
+            <Save size={15} /> {saving ? 'Saving...' : 'Save Security Settings'}
           </button>
         </div>
       </div>
@@ -658,46 +603,26 @@ export default function AdminSettings() {
 
   const renderData = () => (
     <div className="settings-section">
-      <SectionHeader icon={Database} title="Data Management" description="Export, import, and manage system data" />
+      <SectionHeader icon={Database} title="Data Management" description="Export, import, backup, and manage system data" />
       <div className="settings-card">
-        <h3 className="settings-card-title"><Download size={16} /> Export Data</h3>
-        <div className="settings-export-grid">
-          {[
-            { label: 'Export Employees', icon: Users, type: 'Employees', color: '#6366f1' },
-            { label: 'Export Payroll', icon: Wallet, type: 'Payroll', color: '#10b981' },
-            { label: 'Export Attendance', icon: Clock, type: 'Attendance', color: '#f59e0b' },
-          ].map(e => (
-            <button key={e.type} className="settings-export-btn" onClick={() => handleExport(e.type)}>
-              <div className="settings-export-icon" style={{ background: `${e.color}15`, color: e.color }}>
-                <e.icon size={20} />
-              </div>
-              <span>{e.label}</span>
-              <Download size={14} />
-            </button>
-          ))}
-        </div>
-        <div className="settings-divider" />
-        <h3 className="settings-card-title"><Upload size={16} /> Import & Backup</h3>
+        <h3 className="settings-card-title"><Download size={16} /> Backup & Restore</h3>
         <div className="settings-data-actions">
-          <button className="settings-btn settings-btn-secondary" onClick={handleImport}>
-            <Upload size={15} /> Import Employees
-          </button>
           <button className="settings-btn settings-btn-secondary" onClick={handleBackup}>
             <HardDrive size={15} /> Backup Database
           </button>
           <button className="settings-btn settings-btn-secondary" onClick={handleRestore}>
-            <RotateCcw size={15} /> Restore Backup
+            <RotateCcw size={15} /> Restore from Backup
           </button>
         </div>
         <div className="settings-divider" />
         <h3 className="settings-card-title"><Trash2 size={16} /> Danger Zone</h3>
         <div className="settings-danger-zone">
           <div className="settings-danger-info">
-            <span className="settings-danger-label">Reset Demo Data</span>
-            <span className="settings-danger-desc">This will reset all settings to default values. This action cannot be undone.</span>
+            <span className="settings-danger-label">Reset All Data</span>
+            <span className="settings-danger-desc">Permanently delete all employees, attendance, leaves, payroll, notifications, and settings. This action cannot be undone.</span>
           </div>
-          <button className="settings-btn settings-btn-danger" onClick={handleResetDemo}>
-            <RefreshCw size={15} /> Reset Demo Data
+          <button className="settings-btn settings-btn-danger" onClick={handleReset}>
+            <RefreshCw size={15} /> Reset All Data
           </button>
         </div>
       </div>
@@ -712,10 +637,9 @@ export default function AdminSettings() {
           {[
             { label: 'Dayflow HRMS Version', value: 'v2.4.1', icon: Info },
             { label: 'React Version', value: 'v18.2.0', icon: Monitor },
-            { label: 'Vite Version', value: 'v5.4.0', icon: Laptop },
-            { label: 'Last Backup', value: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) + ' 03:00 AM', icon: HardDrive },
-            { label: 'Total Employees', value: '148', icon: Users },
-            { label: 'Total Departments', value: '12', icon: Building2 },
+            { label: 'Backend', value: 'Express + MongoDB', icon: Database },
+            { label: 'Company', value: settings.company?.name || 'Dayflow Inc.', icon: Building2 },
+            { label: 'Database Status', value: 'Connected', icon: CheckCircle },
           ].map((item, i) => (
             <div key={i} className="settings-about-item">
               <div className="settings-about-icon"><item.icon size={18} /></div>
@@ -744,18 +668,21 @@ export default function AdminSettings() {
     }
   };
 
+  if (loading) {
+    return (
+      <div className="settings-page">
+        <div className="settings-loading">
+          <RefreshCw size={24} className="spin" />
+          <span>Loading settings...</span>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="settings-page">
-      {toast && <Toast message={toast} onClose={() => setToast(null)} />}
-      {confirmModal && (
-        <ConfirmModal
-          title={confirmModal.title}
-          message={confirmModal.message}
-          danger={confirmModal.danger}
-          onConfirm={confirmModal.onConfirm}
-          onCancel={() => setConfirmModal(null)}
-        />
-      )}
+      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+      {confirmModal && <ConfirmModal {...confirmModal} onCancel={() => setConfirmModal(null)} />}
 
       <div className="settings-header">
         <div>
@@ -770,11 +697,7 @@ export default function AdminSettings() {
       <div className="settings-layout">
         <nav className="settings-nav">
           {SECTIONS.map(s => (
-            <button
-              key={s.key}
-              className={`settings-nav-item ${activeSection === s.key ? 'active' : ''}`}
-              onClick={() => setActiveSection(s.key)}
-            >
+            <button key={s.key} className={`settings-nav-item ${activeSection === s.key ? 'active' : ''}`} onClick={() => setActiveSection(s.key)}>
               <s.icon size={18} />
               <span>{s.label}</span>
             </button>

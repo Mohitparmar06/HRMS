@@ -19,17 +19,6 @@ const QUICK_ADD_OPTIONS = [
   { label: 'Send Notification', path: '/admin/notifications', icon: '🔔' },
 ];
 
-const DUMMY_MESSAGES = [
-  {
-    id: 1,
-    sender: 'System',
-    avatar: 'SY',
-    preview: 'Welcome to Dayflow HRMS admin panel.',
-    time: '1 min ago',
-    unread: true,
-  },
-];
-
 function formatTimeAgo(timestamp) {
   const diff = Date.now() - new Date(timestamp).getTime();
   const mins = Math.floor(diff / 60000);
@@ -46,14 +35,19 @@ export default function AdminNavbar({ onMobileToggle, isMobileOpen }) {
   const [showNotifications, setShowNotifications] = useState(false);
   const [showQuickAdd, setShowQuickAdd] = useState(false);
   const [showMessages, setShowMessages] = useState(false);
-  const [messages, setMessages] = useState(DUMMY_MESSAGES);
+  const [messages, setMessages] = useState([]);
 
   const notificationsRef = useRef(null);
   const quickAddRef = useRef(null);
   const messagesRef = useRef(null);
   const navigate = useNavigate();
 
-  const { notifications, unreadCount, markAllAsRead } = useNotifications();
+  const { notifications, unreadCount, markAllAsRead, fetchAdminNotifications } = useNotifications();
+
+  useEffect(() => {
+    fetchAdminNotifications();
+  }, [fetchAdminNotifications]);
+
   const adminNotifications = notifications.filter(n => n.targetEmployeeId === null || n.targetEmployeeId === undefined);
   const latestFive = adminNotifications.slice(0, 5);
   const adminUnreadCount = adminNotifications.filter(n => !n.read).length;
@@ -117,7 +111,6 @@ export default function AdminNavbar({ onMobileToggle, isMobileOpen }) {
       </div>
 
       <div className="admin-topbar-right">
-        {/* Quick Add Dropdown */}
         <div className="admin-topbar-action-wrapper" ref={quickAddRef}>
           <button
             className="admin-topbar-action"
@@ -154,7 +147,6 @@ export default function AdminNavbar({ onMobileToggle, isMobileOpen }) {
           )}
         </div>
 
-        {/* Messages Dropdown */}
         <div className="admin-topbar-icon-btn-wrapper" ref={messagesRef}>
           <button
             className="admin-topbar-icon-btn"
@@ -206,7 +198,6 @@ export default function AdminNavbar({ onMobileToggle, isMobileOpen }) {
           )}
         </div>
 
-        {/* Notifications Dropdown */}
         <div className="admin-notification-wrapper" ref={notificationsRef}>
           <button
             className="admin-topbar-icon-btn"

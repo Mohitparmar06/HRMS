@@ -7,7 +7,6 @@ import {
 import { useEmployees } from '../contexts/EmployeeContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useNotifications } from '../contexts/NotificationsContext';
-import { departments } from '../services/dummyData';
 
 const inputStyle = {
   background: 'rgba(255,255,255,0.03)',
@@ -35,7 +34,7 @@ function formatDate(dateStr) {
 }
 
 export default function EmployeeProfile() {
-  const { updateEmployee, getEmployee } = useEmployees();
+  const { updateEmployee, getEmployee, departments } = useEmployees();
   const { user, updateUser } = useAuth();
   const { addNotification } = useNotifications();
 

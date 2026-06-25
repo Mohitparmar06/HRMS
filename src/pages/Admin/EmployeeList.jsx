@@ -5,13 +5,12 @@ import {
   ChevronLeft, ChevronRight, Filter, X, Users
 } from 'lucide-react';
 import { useEmployees } from '../../contexts/EmployeeContext';
-import { departments } from '../../services/dummyData';
 import { formatDate } from '../../utils/formatters';
 import DeleteConfirmation from '../../components/admin/DeleteConfirmation';
 
 export default function EmployeeList() {
   const navigate = useNavigate();
-  const { employees, deleteEmployee } = useEmployees();
+  const { employees, deleteEmployee, departments } = useEmployees();
 
   const [search, setSearch] = useState('');
   const [deptFilter, setDeptFilter] = useState('');

@@ -6,18 +6,37 @@ const notificationSchema = new mongoose.Schema(
       type: String,
       required: true,
     },
-
     message: {
       type: String,
       required: true,
     },
-
     type: {
       type: String,
-      enum: ["Leave", "Attendance", "General"],
+      enum: [
+        "Employee Added",
+        "Employee Updated",
+        "Employee Deleted",
+        "Leave Applied",
+        "Leave Approved",
+        "Leave Rejected",
+        "Payroll Generated",
+        "Payroll Paid",
+        "Attendance Check-In",
+        "Attendance Check-Out",
+        "Profile Updated",
+        "General",
+      ],
       default: "General",
     },
-
+    recipientRole: {
+      type: String,
+      enum: ["Admin", "Employee"],
+      required: true,
+    },
+    recipientId: {
+      type: String,
+      default: null,
+    },
     isRead: {
       type: Boolean,
       default: false,

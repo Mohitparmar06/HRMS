@@ -5,13 +5,12 @@ import {
   DollarSign, Clock, User, Shield, Heart, Building2, Award
 } from 'lucide-react';
 import { useEmployees } from '../../contexts/EmployeeContext';
-import { departments } from '../../services/dummyData';
 import { formatDate, formatCurrency, formatTime } from '../../utils/formatters';
 
 export default function EmployeeProfile() {
   const navigate = useNavigate();
   const { id } = useParams();
-  const { getEmployee } = useEmployees();
+  const { getEmployee, departments } = useEmployees();
   const emp = getEmployee(id);
 
   if (!emp) {

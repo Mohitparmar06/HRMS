@@ -6,7 +6,7 @@ import {
   ChevronLeft, ChevronRight, FileText
 } from 'lucide-react';
 import { useAttendance } from '../../contexts/AttendanceContext';
-import { employees } from '../../services/dummyData';
+import { useEmployees } from '../../contexts/EmployeeContext';
 import { useDepartments } from '../../contexts/DepartmentContext';
 import AttendanceCalendar from '../../components/Attendance/AttendanceCalendar';
 import AttendanceDetailModal from '../../components/Attendance/AttendanceDetailModal';
@@ -38,6 +38,7 @@ function toLocalDateStr(d) {
 
 export default function AdminAttendance() {
   const { attendanceRecords, getStats, getWeeklyTrend, getMonthlyAttendanceByDept, getMonthlySummary } = useAttendance();
+  const { employees } = useEmployees();
   const { departments } = useDepartments();
 
   const [search, setSearch] = useState('');
@@ -184,7 +185,7 @@ export default function AdminAttendance() {
       <div className="att-stats-grid">
         <AttendanceStatCard
           label="Today's Attendance"
-          value={todayStats.present}
+          value={todayStats.present + todayStats.halfDay}
           icon={CheckCircle}
           color="var(--success)"
         />

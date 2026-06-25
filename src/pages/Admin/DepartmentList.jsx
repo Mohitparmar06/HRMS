@@ -5,12 +5,14 @@ import {
   ChevronLeft, ChevronRight, Filter, X, Building2
 } from 'lucide-react';
 import { useDepartments } from '../../contexts/DepartmentContext';
+import { useEmployees } from '../../contexts/EmployeeContext';
 import { formatDate } from '../../utils/formatters';
 import DeleteConfirmation from '../../components/admin/DeleteConfirmation';
 
 export default function DepartmentList() {
   const navigate = useNavigate();
-  const { departments, deleteDepartment, getEmployeesByDept } = useDepartments();
+  const { departments, deleteDepartment } = useDepartments();
+  const { employees } = useEmployees();
 
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
@@ -110,7 +112,7 @@ export default function DepartmentList() {
 
       <div className="dept-cards-grid">
         {paged.map(dept => {
-          const empCount = getEmployeesByDept(dept.name).length;
+          const empCount = employees.filter(e => e.department === dept.name).length;
           return (
             <div key={dept.id} className="dept-card">
               <div className="dept-card-header">

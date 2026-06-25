@@ -1,11 +1,20 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { useSettings } from '../contexts/SettingsContext';
+import { useAuth } from '../contexts/AuthContext';
+import API from '../services/api';
 import {
   Settings, Sun, Moon, Monitor, Bell, Globe, Shield, Lock,
   Save, RotateCcw, Eye, EyeOff, CheckCircle, AlertTriangle, X,
+  Phone, MapPin, Camera, User,
 } from 'lucide-react';
 
-const LANGUAGES = ['English', 'Spanish', 'French', 'German', 'Japanese'];
+const LANGUAGES = [
+  { code: 'en', label: 'English' },
+  { code: 'es', label: 'Spanish' },
+  { code: 'fr', label: 'French' },
+  { code: 'de', label: 'German' },
+  { code: 'ja', label: 'Japanese' },
+];
 
 const TIMEZONES = [
   'UTC-08:00', 'UTC-07:00', 'UTC-06:00', 'UTC-05:00',
@@ -46,6 +55,7 @@ const styles = {
   }),
   input: { background: 'rgba(255,255,255,0.03)', border: '1px solid var(--border-color)', color: 'white', borderRadius: 10, padding: '10px 14px', width: '100%', fontSize: '0.9rem', fontFamily: 'var(--font-main)', outline: 'none', transition: 'border-color 0.2s', boxSizing: 'border-box' },
   select: { background: 'rgba(255,255,255,0.03)', border: '1px solid var(--border-color)', color: 'white', borderRadius: 10, padding: '10px 14px', width: '100%', fontSize: '0.9rem', fontFamily: 'var(--font-main)', outline: 'none', cursor: 'pointer', appearance: 'none', backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%23999' viewBox='0 0 24 24'%3E%3Cpath d='M7 10l5 5 5-5z'/%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 12px center', boxSizing: 'border-box' },
+  textarea: { background: 'rgba(255,255,255,0.03)', border: '1px solid var(--border-color)', color: 'white', borderRadius: 10, padding: '10px 14px', width: '100%', fontSize: '0.9rem', fontFamily: 'var(--font-main)', outline: 'none', resize: 'vertical', minHeight: 80, boxSizing: 'border-box' },
   formGrid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 },
   formGroup: { display: 'flex', flexDirection: 'column', gap: 6 },
   formLabel: { color: 'var(--text-muted)', fontSize: '0.8rem', fontWeight: 500 },
@@ -61,39 +71,29 @@ const styles = {
   actions: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8, paddingTop: 16, borderTop: '1px solid var(--border-color)' },
   inputGroup: { position: 'relative', display: 'flex', alignItems: 'center' },
   inputIcon: { position: 'absolute', right: 12, background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center' },
-  toast: { position: 'fixed', bottom: 24, right: 24, display: 'flex', alignItems: 'center', gap: 10, padding: '14px 20px', borderRadius: 12, background: 'rgba(16,185,129,0.15)', border: '1px solid rgba(16,185,129,0.3)', color: 'var(--success, #10b981)', fontSize: '0.85rem', fontWeight: 500, zIndex: 9999, backdropFilter: 'blur(12px)', animation: 'fadeInUp 0.3s ease', boxShadow: '0 8px 32px rgba(16,185,129,0.2)' },
+  toast: (type) => ({
+    position: 'fixed', bottom: 24, right: 24, display: 'flex', alignItems: 'center', gap: 10,
+    padding: '14px 20px', borderRadius: 12,
+    background: type === 'error' ? 'rgba(239,68,68,0.15)' : 'rgba(16,185,129,0.15)',
+    border: `1px solid ${type === 'error' ? 'rgba(239,68,68,0.3)' : 'rgba(16,185,129,0.3)'}`,
+    color: type === 'error' ? '#ef4444' : 'var(--success, #10b981)',
+    fontSize: '0.85rem', fontWeight: 500, zIndex: 9999, backdropFilter: 'blur(12px)',
+    animation: 'fadeInUp 0.3s ease',
+    boxShadow: `0 8px 32px ${type === 'error' ? 'rgba(239,68,68,0.2)' : 'rgba(16,185,129,0.2)'}`,
+  }),
   toastClose: { background: 'none', border: 'none', color: 'inherit', cursor: 'pointer', padding: 0, display: 'flex', opacity: 0.7 },
-  overlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10000, backdropFilter: 'blur(4px)' },
-  modal: { background: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: 16, padding: 28, maxWidth: 420, width: '90%', textAlign: 'center', boxShadow: '0 20px 60px rgba(0,0,0,0.5)' },
-  modalIcon: { display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 56, height: 56, borderRadius: '50%', background: 'rgba(239,68,68,0.1)', color: '#ef4444', marginBottom: 16 },
-  modalTitle: { color: 'white', fontSize: '1.1rem', fontWeight: 600, margin: '0 0 8px 0' },
-  modalMsg: { color: 'var(--text-muted)', fontSize: '0.85rem', margin: '0 0 24px 0', lineHeight: 1.5 },
-  modalActions: { display: 'flex', gap: 10, justifyContent: 'center' },
   divider: { height: 1, background: 'var(--border-color)', margin: '16px 0' },
+  profileHeader: { display: 'flex', alignItems: 'center', gap: 16, marginBottom: 20 },
+  avatar: { width: 72, height: 72, borderRadius: '50%', background: 'var(--primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.5rem', fontWeight: 700, color: 'white', position: 'relative', overflow: 'hidden', cursor: 'pointer' },
+  avatarOverlay: { position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0, transition: 'opacity 0.2s' },
 };
 
-function Toast({ message, onClose }) {
+function Toast({ message, type = 'success', onClose }) {
   return (
-    <div style={styles.toast}>
-      <CheckCircle size={16} />
+    <div style={styles.toast(type)}>
+      {type === 'error' ? <AlertTriangle size={16} /> : <CheckCircle size={16} />}
       <span>{message}</span>
       <button style={styles.toastClose} onClick={onClose}><X size={14} /></button>
-    </div>
-  );
-}
-
-function ConfirmModal({ title, message, onConfirm, onCancel }) {
-  return (
-    <div style={styles.overlay} onClick={onCancel}>
-      <div style={styles.modal} onClick={e => e.stopPropagation()}>
-        <div style={styles.modalIcon}><AlertTriangle size={28} /></div>
-        <h3 style={styles.modalTitle}>{title}</h3>
-        <p style={styles.modalMsg}>{message}</p>
-        <div style={styles.modalActions}>
-          <button className="btn btn-secondary" onClick={onCancel}>Cancel</button>
-          <button className="btn btn-danger" onClick={onConfirm}>Reset</button>
-        </div>
-      </div>
     </div>
   );
 }
@@ -113,93 +113,122 @@ function Toggle({ checked, onChange, label, description }) {
 }
 
 export default function EmployeeSettings() {
-  const { settings, updatePreferences, updateSecurity, resetSettings } = useSettings();
+  const { settings, updatePreferences, updateSecurity, changePassword, saving } = useSettings();
+  const { user, updateUser } = useAuth();
 
   const [toast, setToast] = useState(null);
-  const [confirmModal, setConfirmModal] = useState(false);
 
-  const [localPrefs, setLocalPrefs] = useState({ ...settings.preferences });
-  const [localSec, setLocalSec] = useState({ ...settings.security });
+  const [localPrefs, setLocalPrefs] = useState(settings.preferences);
+  const [localSec, setLocalSec] = useState(settings.security);
   const [passwords, setPasswords] = useState({ current: '', newPass: '', confirm: '' });
   const [showPw, setShowPw] = useState({ current: false, newPass: false, confirm: false });
 
+  const [profile, setProfile] = useState({
+    phone: user?.phone || '',
+    address: user?.address || '',
+    profilePicture: user?.profilePicture || '',
+  });
+  const [savingProfile, setSavingProfile] = useState(false);
+  const fileInputRef = useRef(null);
+
   useEffect(() => {
-    setLocalPrefs({ ...settings.preferences });
+    setLocalPrefs(settings.preferences);
   }, [settings.preferences]);
 
   useEffect(() => {
-    setLocalSec({ ...settings.security });
+    setLocalSec(settings.security);
   }, [settings.security]);
 
-  const showToast = useCallback((msg = 'Settings saved successfully!') => {
-    setToast(msg);
+  useEffect(() => {
+    setProfile({
+      phone: user?.phone || '',
+      address: user?.address || '',
+      profilePicture: user?.profilePicture || '',
+    });
+  }, [user]);
+
+  const showToast = useCallback((msg, type = 'success') => {
+    setToast({ message: msg, type });
     setTimeout(() => setToast(null), 3000);
   }, []);
 
-  const updatePref = (key, value) => {
-    setLocalPrefs(prev => ({ ...prev, [key]: value }));
-    if (key === 'theme') {
-      updatePreferences({ theme: value });
-    }
-  };
-  const updateSec = (key, value) => setLocalSec(prev => ({ ...prev, [key]: value }));
-  const updatePw = (key, value) => setPasswords(prev => ({ ...prev, [key]: value }));
-
-  const handleSave = () => {
-    updatePreferences({
-      theme: localPrefs.theme,
-      language: localPrefs.language,
-      timezone: localPrefs.timezone,
-      emailNotif: localPrefs.emailNotif,
-      browserNotif: localPrefs.browserNotif,
-    });
-    updateSecurity({
-      twoFactor: localSec.twoFactor,
-      sessionTimeout: localSec.sessionTimeout,
-      loginAlerts: localSec.loginAlerts,
-    });
-    showToast('Settings saved successfully!');
+  const handleSavePreferences = async () => {
+    const res = await updatePreferences(localPrefs);
+    if (res.success) showToast('Preferences saved!');
+    else showToast(res.message, 'error');
   };
 
-  const handlePasswordChange = () => {
+  const handlePasswordChange = async () => {
     if (!passwords.current || !passwords.newPass || !passwords.confirm) {
-      showToast('Please fill in all password fields');
+      showToast('Please fill in all password fields', 'error');
       return;
     }
     if (passwords.newPass !== passwords.confirm) {
-      showToast('New passwords do not match');
+      showToast('New passwords do not match', 'error');
       return;
     }
     if (passwords.newPass.length < 8) {
-      showToast('Password must be at least 8 characters');
+      showToast('Password must be at least 8 characters', 'error');
       return;
     }
-    setPasswords({ current: '', newPass: '', confirm: '' });
-    showToast('Password changed successfully!');
+    const res = await changePassword(passwords.current, passwords.newPass);
+    if (res.success) {
+      setPasswords({ current: '', newPass: '', confirm: '' });
+      showToast('Password changed successfully!');
+    } else {
+      showToast(res.message, 'error');
+    }
   };
 
-  const handleReset = () => {
-    setConfirmModal(true);
+  const handleProfilePictureUpload = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!['image/png', 'image/jpeg', 'image/jpg'].includes(file.type)) {
+      showToast('Please select a PNG, JPG, or JPEG file', 'error');
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      showToast('File size must be less than 5MB', 'error');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      setProfile(prev => ({ ...prev, profilePicture: event.target.result }));
+    };
+    reader.readAsDataURL(file);
+    e.target.value = '';
   };
 
-  const confirmReset = () => {
-    resetSettings();
-    setPasswords({ current: '', newPass: '', confirm: '' });
-    setConfirmModal(false);
-    showToast('Settings reset to defaults!');
+  const handleSaveProfile = async () => {
+    try {
+      setSavingProfile(true);
+      const { data } = await API.put(`/employees/${user.id}`, {
+        phone: profile.phone,
+        address: profile.address,
+        profilePicture: profile.profilePicture,
+      });
+      if (data.success) {
+        updateUser({ phone: profile.phone, address: profile.address, profilePicture: profile.profilePicture });
+        showToast('Profile updated successfully!');
+      } else {
+        showToast(data.message || 'Failed to update profile', 'error');
+      }
+    } catch (error) {
+      showToast(error.response?.data?.message || 'Failed to update profile', 'error');
+    } finally {
+      setSavingProfile(false);
+    }
+  };
+
+  const getInitials = () => {
+    const name = user?.fullName || user?.name || 'U';
+    return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
   };
 
   return (
     <div style={styles.page}>
-      {toast && <Toast message={toast} onClose={() => setToast(null)} />}
-      {confirmModal && (
-        <ConfirmModal
-          title="Reset to Defaults"
-          message="This will reset all your settings to their default values. This action cannot be undone."
-          onConfirm={confirmReset}
-          onCancel={() => setConfirmModal(false)}
-        />
-      )}
+      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+      <input ref={fileInputRef} type="file" accept="image/png,image/jpeg,image/jpg" onChange={handleProfilePictureUpload} style={{ display: 'none' }} />
 
       <div style={styles.header}>
         <div>
@@ -213,17 +242,56 @@ export default function EmployeeSettings() {
         </div>
       </div>
 
+      {/* Profile */}
+      <div style={styles.card}>
+        <h3 style={styles.sectionTitle}><User size={18} /> Profile</h3>
+        <div style={styles.profileHeader}>
+          <div style={styles.avatar} onClick={() => fileInputRef.current?.click()}>
+            {profile.profilePicture ? (
+              <img src={profile.profilePicture} alt="Profile" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            ) : (
+              getInitials()
+            )}
+            <div style={styles.avatarOverlay}>
+              <Camera size={20} color="white" />
+            </div>
+          </div>
+          <div>
+            <div style={{ color: 'white', fontWeight: 600, fontSize: '1rem' }}>{user?.fullName || user?.name || 'User'}</div>
+            <div style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>{user?.designation || user?.position || ''}</div>
+            <div style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>{user?.department || ''}</div>
+          </div>
+        </div>
+        <div style={styles.formGrid}>
+          <div style={styles.formGroup}>
+            <label style={styles.formLabel}>Phone Number</label>
+            <div style={styles.inputGroup}>
+              <Phone size={14} style={{ position: 'absolute', left: 12, color: 'var(--text-muted)' }} />
+              <input type="tel" style={{ ...styles.input, paddingLeft: 34 }} value={profile.phone} onChange={e => setProfile(p => ({ ...p, phone: e.target.value }))} placeholder="+1 (555) 000-0000" />
+            </div>
+          </div>
+        </div>
+        <div style={{ ...styles.formGroup, marginTop: 12 }}>
+          <label style={styles.formLabel}>Address</label>
+          <div style={styles.inputGroup}>
+            <MapPin size={14} style={{ position: 'absolute', left: 12, top: 12, color: 'var(--text-muted)' }} />
+            <textarea style={{ ...styles.textarea, paddingLeft: 34 }} value={profile.address} onChange={e => setProfile(p => ({ ...p, address: e.target.value }))} placeholder="Enter your address" rows={2} />
+          </div>
+        </div>
+        <div style={{ ...styles.actions, borderTop: 'none', paddingTop: 8 }}>
+          <div />
+          <button className="btn btn-primary" onClick={handleSaveProfile} disabled={savingProfile}>
+            <Save size={15} /> {savingProfile ? 'Saving...' : 'Save Profile'}
+          </button>
+        </div>
+      </div>
+
       {/* Appearance */}
       <div style={styles.card}>
         <h3 style={styles.sectionTitle}><Monitor size={18} /> Appearance</h3>
         <div style={styles.themeRow}>
           {THEME_OPTIONS.map(t => (
-            <button
-              key={t.key}
-              type="button"
-              style={styles.themeBtn(localPrefs.theme === t.key)}
-              onClick={() => updatePref('theme', t.key)}
-            >
+            <button key={t.key} type="button" style={styles.themeBtn(localPrefs.theme === t.key)} onClick={() => setLocalPrefs(p => ({ ...p, theme: t.key }))}>
               <t.icon size={20} />
               <span>{t.label}</span>
             </button>
@@ -234,25 +302,14 @@ export default function EmployeeSettings() {
       {/* Notifications */}
       <div style={styles.card}>
         <h3 style={styles.sectionTitle}><Bell size={18} /> Notifications</h3>
-        <Toggle
-          label="Email Notifications"
-          description="Receive email alerts for important updates"
-          checked={localPrefs.emailNotif}
-          onChange={v => updatePref('emailNotif', v)}
-        />
+        <Toggle label="Email Notifications" description="Receive email alerts for important updates" checked={localPrefs.emailNotifications} onChange={v => setLocalPrefs(p => ({ ...p, emailNotifications: v }))} />
         <div style={{ ...styles.toggleRow, borderBottom: 'none' }}>
           <div style={styles.toggleInfo}>
             <span style={styles.toggleLabel}>Browser Notifications</span>
             <span style={styles.toggleDesc}>Show desktop notifications in your browser</span>
           </div>
-          <button
-            type="button"
-            style={styles.toggleTrack(localPrefs.browserNotif)}
-            onClick={() => updatePref('browserNotif', !localPrefs.browserNotif)}
-            role="switch"
-            aria-checked={localPrefs.browserNotif}
-          >
-            <span style={styles.toggleKnob(localPrefs.browserNotif)} />
+          <button type="button" style={styles.toggleTrack(localPrefs.browserNotifications)} onClick={() => setLocalPrefs(p => ({ ...p, browserNotifications: !p.browserNotifications }))} role="switch" aria-checked={localPrefs.browserNotifications}>
+            <span style={styles.toggleKnob(localPrefs.browserNotifications)} />
           </button>
         </div>
       </div>
@@ -263,22 +320,22 @@ export default function EmployeeSettings() {
         <div style={styles.formGrid}>
           <div style={styles.formGroup}>
             <label style={styles.formLabel}>Language</label>
-            <select
-              style={styles.select}
-              value={localPrefs.language}
-              onChange={e => updatePref('language', e.target.value)}
-            >
-              {LANGUAGES.map(l => <option key={l} value={l}>{l}</option>)}
+            <select style={styles.select} value={localPrefs.language} onChange={e => setLocalPrefs(p => ({ ...p, language: e.target.value }))}>
+              {LANGUAGES.map(l => <option key={l.code} value={l.code}>{l.label}</option>)}
             </select>
           </div>
           <div style={styles.formGroup}>
             <label style={styles.formLabel}>Timezone</label>
-            <select
-              style={styles.select}
-              value={localPrefs.timezone}
-              onChange={e => updatePref('timezone', e.target.value)}
-            >
+            <select style={styles.select} value={localPrefs.timezone} onChange={e => setLocalPrefs(p => ({ ...p, timezone: e.target.value }))}>
               {TIMEZONES.map(t => <option key={t} value={t}>{t}</option>)}
+            </select>
+          </div>
+          <div style={styles.formGroup}>
+            <label style={styles.formLabel}>Date Format</label>
+            <select style={styles.select} value={localPrefs.dateFormat} onChange={e => setLocalPrefs(p => ({ ...p, dateFormat: e.target.value }))}>
+              <option value="YYYY-MM-DD">YYYY-MM-DD</option>
+              <option value="DD/MM/YYYY">DD/MM/YYYY</option>
+              <option value="MM/DD/YYYY">MM/DD/YYYY</option>
             </select>
           </div>
         </div>
@@ -287,8 +344,6 @@ export default function EmployeeSettings() {
       {/* Security */}
       <div style={styles.card}>
         <h3 style={styles.sectionTitle}><Shield size={18} /> Security</h3>
-
-        {/* Change Password */}
         <h4 style={{ ...styles.sectionTitle, fontSize: '0.9rem', marginBottom: 12 }}>
           <Lock size={15} /> Change Password
         </h4>
@@ -296,13 +351,7 @@ export default function EmployeeSettings() {
           <div style={styles.formGroup}>
             <label style={styles.formLabel}>Current Password</label>
             <div style={styles.inputGroup}>
-              <input
-                type={showPw.current ? 'text' : 'password'}
-                style={styles.input}
-                value={passwords.current}
-                onChange={e => updatePw('current', e.target.value)}
-                placeholder="Enter current password"
-              />
+              <input type={showPw.current ? 'text' : 'password'} style={styles.input} value={passwords.current} onChange={e => setPasswords(p => ({ ...p, current: e.target.value }))} placeholder="Enter current password" />
               <button type="button" style={styles.inputIcon} onClick={() => setShowPw(p => ({ ...p, current: !p.current }))}>
                 {showPw.current ? <EyeOff size={16} /> : <Eye size={16} />}
               </button>
@@ -311,13 +360,7 @@ export default function EmployeeSettings() {
           <div style={styles.formGroup}>
             <label style={styles.formLabel}>New Password</label>
             <div style={styles.inputGroup}>
-              <input
-                type={showPw.newPass ? 'text' : 'password'}
-                style={styles.input}
-                value={passwords.newPass}
-                onChange={e => updatePw('newPass', e.target.value)}
-                placeholder="Enter new password"
-              />
+              <input type={showPw.newPass ? 'text' : 'password'} style={styles.input} value={passwords.newPass} onChange={e => setPasswords(p => ({ ...p, newPass: e.target.value }))} placeholder="Enter new password" />
               <button type="button" style={styles.inputIcon} onClick={() => setShowPw(p => ({ ...p, newPass: !p.newPass }))}>
                 {showPw.newPass ? <EyeOff size={16} /> : <Eye size={16} />}
               </button>
@@ -326,63 +369,37 @@ export default function EmployeeSettings() {
           <div style={styles.formGroup}>
             <label style={styles.formLabel}>Confirm New Password</label>
             <div style={styles.inputGroup}>
-              <input
-                type={showPw.confirm ? 'text' : 'password'}
-                style={styles.input}
-                value={passwords.confirm}
-                onChange={e => updatePw('confirm', e.target.value)}
-                placeholder="Confirm new password"
-              />
+              <input type={showPw.confirm ? 'text' : 'password'} style={styles.input} value={passwords.confirm} onChange={e => setPasswords(p => ({ ...p, confirm: e.target.value }))} placeholder="Confirm new password" />
               <button type="button" style={styles.inputIcon} onClick={() => setShowPw(p => ({ ...p, confirm: !p.confirm }))}>
                 {showPw.confirm ? <EyeOff size={16} /> : <Eye size={16} />}
               </button>
             </div>
           </div>
         </div>
-        <button className="btn btn-secondary" onClick={handlePasswordChange} style={{ marginBottom: 8 }}>
-          <Lock size={15} /> Update Password
+        <button className="btn btn-secondary" onClick={handlePasswordChange} disabled={saving}>
+          <Lock size={15} /> {saving ? 'Updating...' : 'Update Password'}
         </button>
 
         <div style={styles.divider} />
 
-        {/* 2FA */}
-        <Toggle
-          label="Two-Factor Authentication"
-          description="Add an extra layer of security to your account"
-          checked={localSec.twoFactor}
-          onChange={v => updateSec('twoFactor', v)}
-        />
+        <Toggle label="Two-Factor Authentication" description="Add an extra layer of security to your account" checked={localSec.twoFactorEnabled} onChange={v => setLocalSec(p => ({ ...p, twoFactorEnabled: v }))} />
 
-        {/* Session Timeout */}
         <div style={{ ...styles.toggleRow, gap: 16 }}>
           <div style={styles.toggleInfo}>
             <span style={styles.toggleLabel}>Session Timeout</span>
             <span style={styles.toggleDesc}>Auto-logout after inactivity</span>
           </div>
-          <select
-            style={{ ...styles.select, width: 'auto', minWidth: 100 }}
-            value={localSec.sessionTimeout}
-            onChange={e => updateSec('sessionTimeout', parseInt(e.target.value))}
-          >
-            {SESSION_TIMEOUTS.map(t => (
-              <option key={t} value={t}>{t} min</option>
-            ))}
+          <select style={{ ...styles.select, width: 'auto', minWidth: 100 }} value={localSec.sessionTimeout} onChange={e => setLocalSec(p => ({ ...p, sessionTimeout: parseInt(e.target.value) }))}>
+            {SESSION_TIMEOUTS.map(t => <option key={t} value={t}>{t} min</option>)}
           </select>
         </div>
 
-        {/* Login Alerts */}
         <div style={{ ...styles.toggleRow, borderBottom: 'none' }}>
           <div style={styles.toggleInfo}>
             <span style={styles.toggleLabel}>Login Alerts</span>
             <span style={styles.toggleDesc}>Get notified when someone logs into your account</span>
           </div>
-          <button
-            type="button"
-            style={styles.toggleTrack(localSec.loginAlerts)}
-            onClick={() => updateSec('loginAlerts', !localSec.loginAlerts)}
-            role="switch"
-            aria-checked={localSec.loginAlerts}
-          >
+          <button type="button" style={styles.toggleTrack(localSec.loginAlerts)} onClick={() => setLocalSec(p => ({ ...p, loginAlerts: !p.loginAlerts }))} role="switch" aria-checked={localSec.loginAlerts}>
             <span style={styles.toggleKnob(localSec.loginAlerts)} />
           </button>
         </div>
@@ -391,11 +408,9 @@ export default function EmployeeSettings() {
       {/* Action Buttons */}
       <div style={styles.card}>
         <div style={styles.actions}>
-          <button className="btn btn-danger" onClick={handleReset}>
-            <RotateCcw size={15} /> Reset to Defaults
-          </button>
-          <button className="btn btn-primary" onClick={handleSave}>
-            <Save size={15} /> Save Settings
+          <div />
+          <button className="btn btn-primary" onClick={handleSavePreferences} disabled={saving}>
+            <Save size={15} /> {saving ? 'Saving...' : 'Save Settings'}
           </button>
         </div>
       </div>

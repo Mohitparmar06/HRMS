@@ -23,6 +23,11 @@ const leaveSchema = new mongoose.Schema(
       required: true,
     },
 
+    duration: {
+      type: Number,
+      required: true,
+    },
+
     reason: {
       type: String,
       required: true,
@@ -30,8 +35,33 @@ const leaveSchema = new mongoose.Schema(
 
     status: {
       type: String,
-      enum: ["Pending", "Approved", "Rejected"],
+      enum: ["Pending", "Approved", "Rejected", "Cancelled"],
       default: "Pending",
+    },
+
+    appliedDate: {
+      type: Date,
+      default: Date.now,
+    },
+
+    approvedDate: {
+      type: Date,
+      default: null,
+    },
+
+    approvedBy: {
+      type: String,
+      default: null,
+    },
+
+    rejectedBy: {
+      type: String,
+      default: null,
+    },
+
+    rejectionReason: {
+      type: String,
+      default: null,
     },
   },
   {

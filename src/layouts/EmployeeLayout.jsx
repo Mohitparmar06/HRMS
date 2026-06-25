@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard, User, Clock, Calendar, CreditCard, Bell, Settings, LogOut,
@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useNotifications } from '../contexts/NotificationsContext';
-import { EmployeeProvider } from '../contexts/EmployeeContext';
+import { EmployeeProvider, useEmployees } from '../contexts/EmployeeContext';
 import { AttendanceProvider } from '../contexts/AttendanceContext';
 import { LeaveProvider } from '../contexts/LeaveContext';
 import { PayrollProvider } from '../contexts/PayrollContext';
@@ -25,8 +25,14 @@ const MENU_ITEMS = [
 function EmployeeNavbar() {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
-  const { getUnreadCountForEmployee } = useNotifications();
+  const { getUnreadCountForEmployee, fetchEmployeeNotifications } = useNotifications();
   const unreadCount = getUnreadCountForEmployee(user?.id);
+
+  useEffect(() => {
+    if (user?.id) {
+      fetchEmployeeNotifications(user.id);
+    }
+  }, [user?.id, fetchEmployeeNotifications]);
 
   const initials = useMemo(() => {
     if (!user) return 'U';
@@ -73,34 +79,10 @@ function EmployeeNavbar() {
 }
 
 function AttendanceWithNotifications({ children }) {
-  const { addNotification } = useNotifications();
-
-  const handleCheckIn = useCallback(({ employeeName, employeeId, time }) => {
-    addNotification({
-      title: 'Employee Checked In',
-      description: `${employeeName} (${employeeId}) checked in at ${time}.`,
-      timestamp: new Date().toISOString(),
-      category: 'Attendance',
-      priority: 'Low',
-      read: false,
-      targetEmployeeId: null,
-    });
-  }, [addNotification]);
-
-  const handleCheckOut = useCallback(({ employeeName, employeeId, time, hours }) => {
-    addNotification({
-      title: 'Employee Checked Out',
-      description: `${employeeName} (${employeeId}) checked out at ${time}. Hours worked: ${hours}h.`,
-      timestamp: new Date().toISOString(),
-      category: 'Attendance',
-      priority: 'Low',
-      read: false,
-      targetEmployeeId: null,
-    });
-  }, [addNotification]);
+  const { employees } = useEmployees();
 
   return (
-    <AttendanceProvider onCheckIn={handleCheckIn} onCheckOut={handleCheckOut}>
+    <AttendanceProvider employees={employees}>
       {children}
     </AttendanceProvider>
   );

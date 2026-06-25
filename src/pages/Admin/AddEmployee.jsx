@@ -2,8 +2,6 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Save, Upload, User } from 'lucide-react';
 import { useEmployees } from '../../contexts/EmployeeContext';
-import { useNotifications } from '../../contexts/NotificationsContext';
-import { departments } from '../../services/dummyData';
 
 const positionsByDept = {
   'Engineering': ['Software Engineer', 'Senior Software Engineer', 'Staff Engineer', 'Engineering Manager', 'Data Analyst', 'DevOps Engineer', 'QA Engineer', 'Technical Writer'],
@@ -25,8 +23,7 @@ const initialForm = {
 
 export default function AddEmployee() {
   const navigate = useNavigate();
-  const { addEmployee, getNextId } = useEmployees();
-  const { addNotification } = useNotifications();
+  const { addEmployee, getNextId, departments } = useEmployees();
   const [form, setForm] = useState(initialForm);
   const [errors, setErrors] = useState({});
   const [profilePreview, setProfilePreview] = useState(null);
@@ -93,16 +90,6 @@ export default function AddEmployee() {
       emergencyName: form.emergencyName,
       emergencyContact: form.emergencyContact,
       profilePicture: profilePreview,
-    });
-
-    addNotification({
-      title: 'New Employee Added',
-      description: `${name} (${nextId}) has been added to the ${form.department} department as ${form.position}.`,
-      timestamp: new Date().toISOString(),
-      category: 'Employee',
-      priority: 'Medium',
-      read: false,
-      targetEmployeeId: null,
     });
 
     navigate('/admin/employees');

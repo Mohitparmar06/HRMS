@@ -1,8 +1,9 @@
 import { createContext, useContext, useState, useCallback, useMemo, useEffect } from 'react';
-import { employees as initialEmployees } from '../services/dummyData';
+import API from '../services/api';
 
 const AuthContext = createContext(null);
 const AUTH_KEY = 'dayflow-auth';
+const TOKEN_KEY = 'dayflow-token';
 
 function loadAuth() {
   try {
@@ -21,47 +22,59 @@ function saveAuth(user) {
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(loadAuth);
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => { saveAuth(user); }, [user]);
 
-  const login = useCallback((email, role) => {
-    const emp = initialEmployees.find(e => e.email === email);
-    const authUser = {
-      id: emp?.id || 'EMP-0001',
-      email,
-      role,
-      firstName: emp?.firstName || 'User',
-      lastName: emp?.lastName || '',
-      name: emp ? `${emp.firstName} ${emp.lastName}` : 'User',
-      department: emp?.department || '',
-      departmentId: emp?.departmentId || '',
-      position: emp?.position || '',
-      avatar: emp?.avatar || null,
-      profilePicture: null,
-      phone: emp?.phone || '',
-      joinDate: emp?.joinDate || '',
-      status: emp?.status || 'Active',
-      salary: emp?.salary || 0,
-      gender: null,
-      dob: '',
-      address: '',
-      emergencyName: '',
-      emergencyContact: '',
-    };
-    setUser(authUser);
-    return authUser;
+  const login = useCallback(async (email, password) => {
+    setLoading(true);
+    try {
+      const { data } = await API.post('/auth/login', { email, password });
+      if (data.success) {
+        localStorage.setItem(TOKEN_KEY, data.token);
+        const authUser = {
+          id: data.user._id,
+          email: data.user.email,
+          role: data.user.role,
+          name: data.user.fullName,
+          fullName: data.user.fullName,
+          department: data.user.department,
+          designation: data.user.designation,
+          phone: data.user.phone,
+          profileImage: data.user.profileImage,
+          joinDate: data.user.joiningDate,
+          status: data.user.status,
+          employeeId: data.user.employeeId,
+        };
+        setUser(authUser);
+        return authUser;
+      }
+      throw new Error(data.message || 'Login failed');
+    } catch (err) {
+      throw new Error(err.response?.data?.message || err.message || 'Login failed');
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   const logout = useCallback(() => {
     setUser(null);
     localStorage.removeItem(AUTH_KEY);
+    localStorage.removeItem(TOKEN_KEY);
   }, []);
 
   const updateUser = useCallback((updates) => {
     setUser(prev => prev ? { ...prev, ...updates } : prev);
   }, []);
 
-  const value = useMemo(() => ({ user, login, logout, updateUser, isAuthenticated: !!user }), [user, login, logout, updateUser]);
+  const value = useMemo(() => ({
+    user,
+    login,
+    logout,
+    updateUser,
+    loading,
+    isAuthenticated: !!user,
+  }), [user, login, logout, updateUser, loading]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

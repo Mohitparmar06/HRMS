@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useNotifications } from '../../contexts/NotificationsContext';
 import {
@@ -74,8 +74,13 @@ export default function AdminNotifications() {
   const navigate = useNavigate();
   const {
     notifications, unreadCount, highPriorityCount,
-    markAsRead, markAsUnread, markAllAsRead, deleteNotification, clearAll,
+    fetchAdminNotifications, markAsRead, markAsUnread, markAllAsRead,
+    deleteNotification, clearAll,
   } = useNotifications();
+
+  useEffect(() => {
+    fetchAdminNotifications();
+  }, [fetchAdminNotifications]);
 
   const [activeTab, setActiveTab] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
@@ -87,10 +92,15 @@ export default function AdminNotifications() {
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [expandedActions, setExpandedActions] = useState(null);
 
-  const readCount = notifications.length - unreadCount;
+  const adminNotifications = useMemo(
+    () => notifications.filter(n => n.targetEmployeeId === null || n.targetEmployeeId === undefined),
+    [notifications]
+  );
+
+  const readCount = adminNotifications.length - adminNotifications.filter(n => !n.read).length;
 
   const filtered = useMemo(() => {
-    let result = notifications.filter(n => n.targetEmployeeId === null || n.targetEmployeeId === undefined);
+    let result = [...adminNotifications];
 
     if (activeTab === 'unread') result = result.filter(n => !n.read);
     else if (activeTab === 'read') result = result.filter(n => n.read);
@@ -106,7 +116,6 @@ export default function AdminNotifications() {
       result = result.filter(n =>
         n.title.toLowerCase().includes(q) ||
         n.description.toLowerCase().includes(q) ||
-        (n.employeeName || '').toLowerCase().includes(q) ||
         n.category.toLowerCase().includes(q)
       );
     }
@@ -117,23 +126,23 @@ export default function AdminNotifications() {
     });
 
     return result;
-  }, [notifications, activeTab, filterCategory, filterPriority, searchQuery, sortBy]);
+  }, [adminNotifications, activeTab, filterCategory, filterPriority, searchQuery, sortBy]);
 
   const handleNotificationClick = (notif) => {
     if (!notif.read) markAsRead(notif.id);
     setSelectedNotification(notif);
   };
 
-  const handleClearAll = () => {
-    clearAll();
+  const handleClearAll = async () => {
+    await clearAll('Admin');
     setShowClearConfirm(false);
   };
 
   const getTabCount = (key) => {
-    if (key === 'all') return notifications.length;
-    if (key === 'unread') return unreadCount;
+    if (key === 'all') return adminNotifications.length;
+    if (key === 'unread') return adminNotifications.filter(n => !n.read).length;
     if (key === 'read') return readCount;
-    return notifications.filter(n => n.category === key).length;
+    return adminNotifications.filter(n => n.category === key).length;
   };
 
   return (
@@ -158,10 +167,10 @@ export default function AdminNotifications() {
 
       <div className="notif-stats">
         {[
-          { label: 'Total', value: notifications.length, icon: Bell, color: '#6366f1', bg: 'rgba(99,102,241,0.1)' },
-          { label: 'Unread', value: unreadCount, icon: BellRing, color: '#f59e0b', bg: 'rgba(245,158,11,0.1)' },
+          { label: 'Total', value: adminNotifications.length, icon: Bell, color: '#6366f1', bg: 'rgba(99,102,241,0.1)' },
+          { label: 'Unread', value: adminNotifications.filter(n => !n.read).length, icon: BellRing, color: '#f59e0b', bg: 'rgba(245,158,11,0.1)' },
           { label: 'Read', value: readCount, icon: BellOff, color: '#22c55e', bg: 'rgba(34,197,94,0.1)' },
-          { label: 'High Priority', value: highPriorityCount, icon: AlertTriangle, color: '#ef4444', bg: 'rgba(239,68,68,0.1)' },
+          { label: 'High Priority', value: adminNotifications.filter(n => n.priority === 'High' && !n.read).length, icon: AlertTriangle, color: '#ef4444', bg: 'rgba(239,68,68,0.1)' },
         ].map((s, i) => (
           <div key={i} className="notif-stat-card">
             <div className="notif-stat-icon" style={{ background: s.bg, color: s.color }}>
@@ -283,11 +292,6 @@ export default function AdminNotifications() {
                       <span className="notif-item-time">
                         <Clock size={12} /> {formatTimestamp(n.timestamp)}
                       </span>
-                      {n.employeeName && (
-                        <span className="notif-item-employee">
-                          <User size={12} /> {n.employeeName}
-                        </span>
-                      )}
                     </div>
                   </div>
                   <div className="notif-item-actions" onClick={e => e.stopPropagation()}>
@@ -374,22 +378,6 @@ export default function AdminNotifications() {
                     }
                   </span>
                 </div>
-                {selectedNotification.employeeName && (
-                  <div className="notif-modal-detail">
-                    <span className="notif-modal-detail-label">Employee</span>
-                    <span className="notif-modal-detail-value notif-modal-detail-flex">
-                      <User size={14} /> {selectedNotification.employeeName}
-                    </span>
-                  </div>
-                )}
-                {selectedNotification.employeeId && (
-                  <div className="notif-modal-detail">
-                    <span className="notif-modal-detail-label">Employee ID</span>
-                    <span className="notif-modal-detail-value notif-modal-detail-flex">
-                      <Info size={14} /> {selectedNotification.employeeId}
-                    </span>
-                  </div>
-                )}
               </div>
             </div>
             <div className="notif-modal-footer">
