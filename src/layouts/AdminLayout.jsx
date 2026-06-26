@@ -9,6 +9,15 @@ import { LeaveProvider } from '../contexts/LeaveContext';
 import { PayrollProvider } from '../contexts/PayrollContext';
 import { SettingsProvider } from '../contexts/SettingsContext';
 
+function AdminDepartmentWrapper({ children }) {
+  const { employees } = useEmployees();
+  return (
+    <DepartmentProvider employees={employees}>
+      {children}
+    </DepartmentProvider>
+  );
+}
+
 function AdminAttendanceWrapper({ children }) {
   const { employees } = useEmployees();
   return (
@@ -25,7 +34,7 @@ export default function AdminLayout() {
   return (
     <SettingsProvider>
       <EmployeeProvider>
-        <DepartmentProvider>
+        <AdminDepartmentWrapper>
           <AdminAttendanceWrapper>
             <LeaveProvider>
               <PayrollProvider>
@@ -48,7 +57,7 @@ export default function AdminLayout() {
               </PayrollProvider>
             </LeaveProvider>
           </AdminAttendanceWrapper>
-        </DepartmentProvider>
+        </AdminDepartmentWrapper>
       </EmployeeProvider>
     </SettingsProvider>
   );

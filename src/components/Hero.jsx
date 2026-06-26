@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowRight, Play, Users, Calendar, CheckCircle, Clock } from 'lucide-react';
+import { ArrowRight, Users, Calendar, CheckCircle, Clock } from 'lucide-react';
+import { Link } from 'react-router-dom';
 
 export default function Hero() {
   const [activeTab, setActiveTab] = useState(1);
@@ -34,11 +35,11 @@ export default function Hero() {
             Manage employees, attendance, payroll, and leave in one intelligent, glassmorphic platform designed for the modern remote and hybrid workforce.
           </p>
           <div className="hero-buttons">
-            <a href="#signup" className="btn btn-primary">
+            <Link to="/login" className="btn btn-primary">
               Get Started <ArrowRight size={18} />
-            </a>
-            <a href="#how-it-works" className="btn btn-secondary">
-              <Play size={16} fill="white" /> Learn More
+            </Link>
+            <a href="#demo" className="btn btn-secondary">
+              Book Demo <ArrowRight size={18} />
             </a>
           </div>
         </div>

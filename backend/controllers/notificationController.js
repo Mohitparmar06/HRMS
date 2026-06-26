@@ -2,16 +2,23 @@ const Notification = require("../models/Notification");
 
 exports.createNotification = async (req, res) => {
   try {
-    const { title, type, recipientRole } = req.body;
+    const { title, message, type, recipientRole, recipientId } = req.body;
 
-    if (!title || !type || !recipientRole) {
+    if (!title || !message || !type || !recipientRole) {
       return res.status(400).json({
         success: false,
-        message: "title, type, and recipientRole are required",
+        message: "title, message, type, and recipientRole are required",
       });
     }
 
-    const notification = await Notification.create(req.body);
+    const notification = await Notification.create({
+      title,
+      message,
+      type,
+      recipientRole,
+      recipientId: recipientId || null,
+      isRead: false,
+    });
     res.status(201).json({ success: true, notification });
   } catch (error) {
     res.status(400).json({ success: false, message: error.message });
@@ -58,6 +65,22 @@ exports.markAsRead = async (req, res) => {
     const notification = await Notification.findByIdAndUpdate(
       req.params.id,
       { isRead: true },
+      { new: true }
+    );
+    if (!notification) {
+      return res.status(404).json({ success: false, message: "Notification not found" });
+    }
+    res.status(200).json({ success: true, notification });
+  } catch (error) {
+    res.status(400).json({ success: false, message: error.message });
+  }
+};
+
+exports.markAsUnread = async (req, res) => {
+  try {
+    const notification = await Notification.findByIdAndUpdate(
+      req.params.id,
+      { isRead: false },
       { new: true }
     );
     if (!notification) {

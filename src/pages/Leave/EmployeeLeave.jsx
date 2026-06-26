@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
 import {
   CheckCircle, XCircle, Clock, CalendarDays, TrendingUp,
-  Plus, X, AlertTriangle, Award
+  Plus, X, AlertTriangle, Award, Search
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useLeave } from '../../contexts/LeaveContext';
@@ -49,9 +49,24 @@ export default function EmployeeLeave() {
   const [showApplyForm, setShowApplyForm] = useState(false);
   const [detailRecord, setDetailRecord] = useState(null);
   const [cancelConfirm, setCancelConfirm] = useState(null);
+  const [historySearch, setHistorySearch] = useState('');
+  const [historyStatusFilter, setHistoryStatusFilter] = useState('');
 
   const pendingRequests = empLeaves.filter(r => r.status === 'Pending');
-  const recentLeaves = [...empLeaves].sort((a, b) => (b.appliedDate || '').localeCompare(a.appliedDate || '')).slice(0, 10);
+  const filteredHistory = useMemo(() => {
+    let result = [...empLeaves];
+    if (historySearch) {
+      const q = historySearch.toLowerCase();
+      result = result.filter(r =>
+        (r.leaveType || '').toLowerCase().includes(q) ||
+        (r.reason || '').toLowerCase().includes(q)
+      );
+    }
+    if (historyStatusFilter) {
+      result = result.filter(r => r.status === historyStatusFilter);
+    }
+    return result.sort((a, b) => (b.appliedDate || '').localeCompare(a.appliedDate || ''));
+  }, [empLeaves, historySearch, historyStatusFilter]);
 
   const totalUsed = Object.values(balance).reduce((sum, b) => sum + b.used, 0);
   const totalRemaining = Object.values(balance).reduce((sum, b) => sum + b.remaining, 0);
@@ -181,11 +196,50 @@ export default function EmployeeLeave() {
 
       {activeTab === 'history' && (
         <div className="leave-history">
+          <div className="leave-filters-row" style={{ marginBottom: '16px' }}>
+            <div className="leave-search-wrap">
+              <Search size={16} />
+              <input
+                type="text"
+                placeholder="Search by leave type or reason..."
+                value={historySearch}
+                onChange={e => setHistorySearch(e.target.value)}
+              />
+              {historySearch && (
+                <button className="emp-search-clear" onClick={() => setHistorySearch('')} style={{ background: 'none', border: 'none', color: 'var(--text-dim)', cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
+                  <X size={14} />
+                </button>
+              )}
+            </div>
+            <select
+              className="leave-filter-select"
+              value={historyStatusFilter}
+              onChange={e => setHistoryStatusFilter(e.target.value)}
+            >
+              <option value="">All Status</option>
+              <option value="Pending">Pending</option>
+              <option value="Approved">Approved</option>
+              <option value="Rejected">Rejected</option>
+              <option value="Cancelled">Cancelled</option>
+            </select>
+            {(historySearch || historyStatusFilter) && (
+              <button
+                className="btn btn-outline"
+                style={{ padding: '8px 14px', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '4px' }}
+                onClick={() => { setHistorySearch(''); setHistoryStatusFilter(''); }}
+              >
+                <X size={14} /> Clear
+              </button>
+            )}
+          </div>
           <div className="leave-history-list">
-            {recentLeaves.length === 0 ? (
-              <div className="leave-empty-state">No leave history</div>
+            {filteredHistory.length === 0 ? (
+              <div className="leave-empty-state">
+                <Search size={32} style={{ opacity: 0.3, marginBottom: 8 }} />
+                <span>No leave records found</span>
+              </div>
             ) : (
-              recentLeaves.map(record => {
+              filteredHistory.map(record => {
                 const StatusIcon = STATUS_ICONS[record.status];
                 const typeColor = LEAVE_TYPE_COLORS[record.leaveType];
                 return (

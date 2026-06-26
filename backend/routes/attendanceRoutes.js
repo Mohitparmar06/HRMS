@@ -1,5 +1,4 @@
 const express = require("express");
-const protect = require("../middleware/authMiddleware");
 const router = express.Router();
 
 const {
@@ -10,12 +9,14 @@ const {
   deleteAttendance,
 } = require("../controllers/attendanceController");
 
+const { protect, adminOnly } = require("../middleware/authMiddleware");
+
 router.use(protect);
 
 router.post("/checkin", checkIn);
 router.put("/checkout/:id", checkOut);
 router.get("/", getAttendance);
-router.put("/:id", updateAttendance);
-router.delete("/:id", deleteAttendance);
+router.put("/:id", adminOnly, updateAttendance);
+router.delete("/:id", adminOnly, deleteAttendance);
 
 module.exports = router;

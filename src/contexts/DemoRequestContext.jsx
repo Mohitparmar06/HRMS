@@ -9,6 +9,8 @@ export function DemoRequestProvider({ children }) {
   const [loading, setLoading] = useState(false);
 
   const fetchRequests = useCallback(async (params = {}) => {
+    const token = localStorage.getItem("dayflow-token");
+    if (!token) return;
     try {
       setLoading(true);
       const { data } = await API.get('/demo-requests', { params });
@@ -23,6 +25,8 @@ export function DemoRequestProvider({ children }) {
   }, []);
 
   const fetchStats = useCallback(async () => {
+    const token = localStorage.getItem("dayflow-token");
+    if (!token) return;
     try {
       const { data } = await API.get('/demo-requests/stats');
       if (data.success) {
@@ -34,8 +38,11 @@ export function DemoRequestProvider({ children }) {
   }, []);
 
   useEffect(() => {
-    fetchRequests();
-    fetchStats();
+    const token = localStorage.getItem("dayflow-token");
+    if (token) {
+      fetchRequests();
+      fetchStats();
+    }
   }, [fetchRequests, fetchStats]);
 
   const addRequest = useCallback(async (request) => {
@@ -43,12 +50,14 @@ export function DemoRequestProvider({ children }) {
       const { data } = await API.post('/demo-requests', request);
       if (data.success) {
         setRequests(prev => [data.request, ...prev]);
-        await fetchStats();
+        const token = localStorage.getItem("dayflow-token");
+        if (token) await fetchStats();
         return { success: true };
       }
-      return { success: false, message: data.message };
+      return { success: false, message: data.message || 'Failed to submit request' };
     } catch (error) {
-      return { success: false, message: error.response?.data?.message || 'Failed to submit request' };
+      const message = error.response?.data?.message || error.message || 'Failed to submit request';
+      return { success: false, message };
     }
   }, [fetchStats]);
 

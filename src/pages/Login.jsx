@@ -51,7 +51,9 @@ export default function Login() {
       setIsLoading(true);
       try {
         const authUser = await login(email.toLowerCase().trim(), password);
-        if (authUser.role === 'admin') {
+        if (authUser.firstLogin) {
+          navigate('/change-password');
+        } else if (authUser.role === 'Admin') {
           navigate('/admin');
         } else {
           navigate('/dashboard');
@@ -113,7 +115,7 @@ export default function Login() {
         </div>
 
         <div className="login-left-footer">
-          © 2026 Dayflow Technologies Inc. All rights reserved.
+          &copy; 2026 Dayflow Technologies Inc. All rights reserved.
         </div>
       </div>
 
@@ -158,7 +160,7 @@ export default function Login() {
                     id="password"
                     type={showPassword ? 'text' : 'password'}
                     className={`form-input ${passwordError ? 'error' : ''}`}
-                    placeholder="••••••••"
+                    placeholder="&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;"
                     value={password}
                     onChange={(e) => {
                       setPassword(e.target.value);
@@ -221,10 +223,6 @@ export default function Login() {
                 )}
               </button>
             </form>
-
-            <div className="login-footer-text">
-              Don't have an account? <Link to="/register">Create Account</Link>
-            </div>
           </div>
         </div>
       </div>

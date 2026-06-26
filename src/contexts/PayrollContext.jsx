@@ -28,6 +28,8 @@ export function PayrollProvider({ children }) {
   const [records, setRecords] = useState([]);
 
   const fetchPayrolls = useCallback(async () => {
+    const token = localStorage.getItem("dayflow-token");
+    if (!token) return;
     try {
       const res = await API.get('/payrolls');
       setRecords(res.data.payrolls || []);

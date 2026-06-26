@@ -1,12 +1,12 @@
 import { useState } from 'react';
 import { Calendar, ArrowRight, CheckCircle, Play, Users } from 'lucide-react';
 import { useDemoRequests } from '../contexts/DemoRequestContext';
-import { useNotifications } from '../contexts/NotificationsContext';
 
 export default function DemoCTA() {
   const [submitted, setSubmitted] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState('');
   const { addRequest } = useDemoRequests();
-  const { addNotification } = useNotifications();
   const [form, setForm] = useState({
     fullName: '', companyName: '', email: '', phone: '',
     teamSize: '', preferredDate: '', preferredTime: '', message: '',
@@ -14,35 +14,38 @@ export default function DemoCTA() {
 
   const handleChange = (field, value) => {
     setForm(prev => ({ ...prev, [field]: value }));
+    if (error) setError('');
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
+    setError('');
+    setSubmitting(true);
 
-    const newRequest = addRequest({
-      fullName: form.fullName,
-      companyName: form.companyName,
-      email: form.email,
-      phone: form.phone,
-      teamSize: form.teamSize,
-      preferredDate: form.preferredDate,
-      preferredTime: form.preferredTime,
-      message: form.message,
-    });
+    try {
+      const result = await addRequest({
+        fullName: form.fullName,
+        company: form.companyName,
+        email: form.email,
+        phone: form.phone,
+        teamSize: form.teamSize,
+        preferredDate: form.preferredDate,
+        preferredTime: form.preferredTime,
+        message: form.message,
+      });
 
-    addNotification({
-      title: 'New Demo Request',
-      description: `New demo request from ${form.fullName} at ${form.companyName}. Email: ${form.email}. Team size: ${form.teamSize || 'Not specified'}.`,
-      timestamp: new Date().toISOString(),
-      category: 'System',
-      priority: 'Medium',
-      read: false,
-      targetEmployeeId: null,
-    });
-
-    setForm({ fullName: '', companyName: '', email: '', phone: '', teamSize: '', preferredDate: '', preferredTime: '', message: '' });
-    setSubmitted(true);
-    setTimeout(() => setSubmitted(false), 4000);
+      if (result && result.success) {
+        setForm({ fullName: '', companyName: '', email: '', phone: '', teamSize: '', preferredDate: '', preferredTime: '', message: '' });
+        setSubmitted(true);
+        setTimeout(() => setSubmitted(false), 4000);
+      } else {
+        setError(result?.message || 'Failed to submit demo request. Please try again.');
+      }
+    } catch (err) {
+      setError('Failed to submit demo request. Please try again.');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -246,8 +249,24 @@ export default function DemoCTA() {
                 />
               </div>
 
-              <button type="submit" className="btn btn-primary" style={{ padding: '14px 28px', fontSize: '0.95rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 8 }}>
-                <Calendar size={18} /> Schedule Demo
+              {error && (
+                <div style={{
+                  background: 'rgba(239, 68, 68, 0.1)',
+                  border: '1px solid rgba(239, 68, 68, 0.3)',
+                  borderRadius: 10,
+                  padding: '12px 16px',
+                  color: '#f87171',
+                  fontSize: '0.85rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                }}>
+                  {error}
+                </div>
+              )}
+
+              <button type="submit" className="btn btn-primary" disabled={submitting} style={{ padding: '14px 28px', fontSize: '0.95rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 8, opacity: submitting ? 0.7 : 1, cursor: submitting ? 'not-allowed' : 'pointer' }}>
+                <Calendar size={18} /> {submitting ? 'Submitting...' : 'Schedule Demo'}
               </button>
             </form>
           )}

@@ -22,6 +22,8 @@ export function LeaveProvider({ children }) {
   const [leaveRecords, setLeaveRecords] = useState([]);
 
   const fetchLeaves = useCallback(async () => {
+    const token = localStorage.getItem("dayflow-token");
+    if (!token) return;
     try {
       const res = await API.get('/leaves');
       setLeaveRecords(res.data.leaves || []);

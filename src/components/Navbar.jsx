@@ -49,7 +49,7 @@ export default function Navbar() {
 
         <div className="nav-actions">
           <Link to="/login" className="btn btn-text">Login</Link>
-          <Link to="/register" className="btn btn-primary" style={{ padding: '8px 18px', fontSize: '0.9rem' }}>
+          <Link to="/login" className="btn btn-primary" style={{ padding: '8px 18px', fontSize: '0.9rem' }}>
             Get Started <ArrowRight size={14} />
           </Link>
         </div>
@@ -76,7 +76,7 @@ export default function Navbar() {
         </ul>
         <div className="nav-actions">
           <Link to="/login" className="btn btn-secondary" onClick={closeMenu}>Login</Link>
-          <Link to="/register" className="btn btn-primary" onClick={closeMenu}>Get Started</Link>
+          <Link to="/login" className="btn btn-primary" onClick={closeMenu}>Get Started</Link>
         </div>
       </div>
     </header>

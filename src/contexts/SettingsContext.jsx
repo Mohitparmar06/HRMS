@@ -56,6 +56,15 @@ const DEFAULTS = {
   },
 };
 
+const DEFAULT_USER_PREFERENCES = {
+  theme: "dark",
+  language: "en",
+  timezone: "UTC+00:00",
+  dateFormat: "YYYY-MM-DD",
+  emailNotifications: true,
+  browserNotifications: false,
+};
+
 const CURRENCY_MAP = {
   USD: { symbol: "$", name: "US Dollar" },
   EUR: { symbol: "€", name: "Euro" },
@@ -68,10 +77,17 @@ const CURRENCY_MAP = {
 
 export function SettingsProvider({ children }) {
   const [settings, setSettings] = useState(DEFAULTS);
+  const [userPreferences, setUserPreferences] = useState(DEFAULT_USER_PREFERENCES);
+  const [userProfile, setUserProfile] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
   const fetchSettings = useCallback(async () => {
+    const token = localStorage.getItem("dayflow-token");
+    if (!token) {
+      setLoading(false);
+      return;
+    }
     try {
       setLoading(true);
       const { data } = await API.get('/settings');
@@ -85,21 +101,49 @@ export function SettingsProvider({ children }) {
     }
   }, []);
 
-  useEffect(() => {
-    fetchSettings();
-  }, [fetchSettings]);
+  const fetchUserPreferences = useCallback(async () => {
+    const token = localStorage.getItem("dayflow-token");
+    if (!token) return;
+    try {
+      const { data } = await API.get('/user-settings/me/preferences');
+      if (data.success) {
+        setUserPreferences(data.preferences);
+      }
+    } catch (error) {
+      console.error('Failed to fetch user preferences:', error);
+    }
+  }, []);
+
+  const fetchUserProfile = useCallback(async () => {
+    const token = localStorage.getItem("dayflow-token");
+    if (!token) return;
+    try {
+      const { data } = await API.get('/user-settings/me/profile');
+      if (data.success) {
+        setUserProfile(data.profile);
+      }
+    } catch (error) {
+      console.error('Failed to fetch user profile:', error);
+    }
+  }, []);
 
   useEffect(() => {
-    const theme = settings.preferences?.theme || 'dark';
-    if (theme === 'dark') {
+    fetchSettings();
+    fetchUserPreferences();
+    fetchUserProfile();
+  }, [fetchSettings, fetchUserPreferences, fetchUserProfile]);
+
+  const activeTheme = userPreferences.theme || settings.preferences?.theme || 'dark';
+  useEffect(() => {
+    if (activeTheme === 'dark') {
       document.documentElement.classList.remove('light-theme');
-    } else if (theme === 'light') {
+    } else if (activeTheme === 'light') {
       document.documentElement.classList.add('light-theme');
     } else {
       const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
       document.documentElement.classList.toggle('light-theme', !prefersDark);
     }
-  }, [settings.preferences?.theme]);
+  }, [activeTheme]);
 
   const updateSection = useCallback(async (section, data) => {
     try {
@@ -112,6 +156,40 @@ export function SettingsProvider({ children }) {
       return { success: false, message: res.message };
     } catch (error) {
       const msg = error.response?.data?.message || 'Failed to update settings';
+      return { success: false, message: msg };
+    } finally {
+      setSaving(false);
+    }
+  }, []);
+
+  const updateUserPreferences = useCallback(async (prefsData) => {
+    try {
+      setSaving(true);
+      const { data: res } = await API.put('/user-settings/me/preferences', prefsData);
+      if (res.success) {
+        setUserPreferences(res.preferences);
+        return { success: true };
+      }
+      return { success: false, message: res.message };
+    } catch (error) {
+      const msg = error.response?.data?.message || 'Failed to update preferences';
+      return { success: false, message: msg };
+    } finally {
+      setSaving(false);
+    }
+  }, []);
+
+  const updateUserProfile = useCallback(async (profileData) => {
+    try {
+      setSaving(true);
+      const { data: res } = await API.put('/user-settings/me/profile', profileData);
+      if (res.success) {
+        setUserProfile(res.profile);
+        return { success: true, profile: res.profile };
+      }
+      return { success: false, message: res.message };
+    } catch (error) {
+      const msg = error.response?.data?.message || 'Failed to update profile';
       return { success: false, message: msg };
     } finally {
       setSaving(false);
@@ -187,6 +265,8 @@ export function SettingsProvider({ children }) {
 
   const value = useMemo(() => ({
     settings,
+    userPreferences,
+    userProfile,
     loading,
     saving,
     defaults: DEFAULTS,
@@ -198,6 +278,8 @@ export function SettingsProvider({ children }) {
     updateLeave,
     updatePreferences,
     updateSecurity,
+    updateUserPreferences,
+    updateUserProfile,
     changePassword,
     backupData,
     restoreData,
@@ -205,11 +287,14 @@ export function SettingsProvider({ children }) {
     formatCurrency,
     getCurrencySymbol,
     fetchSettings,
+    fetchUserPreferences,
+    fetchUserProfile,
   }), [
-    settings, loading, saving, updateSection,
+    settings, userPreferences, userProfile, loading, saving, updateSection,
     updateCompany, updateAttendance, updatePayroll, updateLeave,
-    updatePreferences, updateSecurity, changePassword,
-    backupData, restoreData, resetData, formatCurrency, getCurrencySymbol, fetchSettings,
+    updatePreferences, updateSecurity, updateUserPreferences, updateUserProfile,
+    changePassword, backupData, restoreData, resetData, formatCurrency,
+    getCurrencySymbol, fetchSettings, fetchUserPreferences, fetchUserProfile,
   ]);
 
   return (

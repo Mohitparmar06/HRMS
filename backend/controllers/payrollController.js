@@ -1,5 +1,5 @@
 const Payroll = require("../models/Payroll");
-const Notification = require("../models/Notification");
+const { notifyAdmin, notifyEmployee } = require("../services/notificationService");
 
 function toLocalDateStr(d) {
   if (!d) return null;
@@ -69,22 +69,17 @@ exports.createPayroll = async (req, res) => {
     const populated = await Payroll.findById(payroll._id).populate('employeeId');
     const emp = populated.employeeId;
 
-    await Notification.create({
+    await notifyEmployee({
       title: "Payroll Generated",
-      message: `Payroll for ${populated.period} has been generated for ${emp?.fullName || 'Employee'}. Net salary: $${populated.netSalary?.toLocaleString()}.`,
+      message: `Payroll for ${populated.period} has been generated for you. Net salary: $${populated.netSalary?.toLocaleString()}.`,
       type: "Payroll Generated",
-      recipientRole: "Employee",
-      recipientId: emp?.employeeId || null,
-      isRead: false,
+      employeeId: emp?.employeeId || null,
     });
 
-    await Notification.create({
+    await notifyAdmin({
       title: "Payroll Generated",
       message: `Payroll for ${emp?.fullName || 'Employee'} (${emp?.employeeId || ''}) has been generated for ${populated.period}. Net salary: $${populated.netSalary?.toLocaleString()}.`,
       type: "Payroll Generated",
-      recipientRole: "Admin",
-      recipientId: null,
-      isRead: false,
     });
 
     res.status(201).json({ success: true, payroll: transformRecord(populated) });
@@ -151,13 +146,11 @@ exports.updatePayroll = async (req, res) => {
 
     if (req.body.status === 'Paid') {
       const emp = payroll.employeeId;
-      await Notification.create({
+      await notifyEmployee({
         title: "Payroll Paid",
         message: `Your salary for ${payroll.period} ($${payroll.netSalary?.toLocaleString()}) has been deposited.`,
         type: "Payroll Paid",
-        recipientRole: "Employee",
-        recipientId: emp?.employeeId || null,
-        isRead: false,
+        employeeId: emp?.employeeId || null,
       });
     }
 

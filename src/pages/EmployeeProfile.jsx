@@ -43,7 +43,7 @@ export default function EmployeeProfile() {
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
 
-  const latestEmployee = getEmployee(user.id);
+  const latestEmployee = getEmployee(user.employeeId);
   const currentEmp = latestEmployee || user;
 
   const [formData, setFormData] = useState({
@@ -64,7 +64,7 @@ export default function EmployeeProfile() {
 
   useEffect(() => {
     if (!isEditing) {
-      const latest = getEmployee(user.id) || user;
+      const latest = getEmployee(user.employeeId) || user;
       setFormData({
         firstName: latest.firstName,
         lastName: latest.lastName,

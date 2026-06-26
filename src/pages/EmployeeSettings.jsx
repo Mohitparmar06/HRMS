@@ -1,10 +1,9 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { useSettings } from '../contexts/SettingsContext';
 import { useAuth } from '../contexts/AuthContext';
-import API from '../services/api';
 import {
   Settings, Sun, Moon, Monitor, Bell, Globe, Shield, Lock,
-  Save, RotateCcw, Eye, EyeOff, CheckCircle, AlertTriangle, X,
+  Save, Eye, EyeOff, CheckCircle, AlertTriangle, X,
   Phone, MapPin, Camera, User,
 } from 'lucide-react';
 
@@ -22,8 +21,6 @@ const TIMEZONES = [
   'UTC+00:00', 'UTC+01:00', 'UTC+02:00', 'UTC+03:00',
   'UTC+04:00', 'UTC+05:00', 'UTC+06:00', 'UTC+07:00', 'UTC+08:00',
 ];
-
-const SESSION_TIMEOUTS = [15, 30, 60, 120];
 
 const THEME_OPTIONS = [
   { key: 'dark', label: 'Dark', icon: Moon },
@@ -68,7 +65,7 @@ const styles = {
     color: active ? 'var(--primary)' : 'var(--text-muted)',
     transition: 'all 0.2s', fontFamily: 'var(--font-main)', fontSize: '0.8rem', fontWeight: 500,
   }),
-  actions: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8, paddingTop: 16, borderTop: '1px solid var(--border-color)' },
+  actions: { display: 'flex', justifyContent: 'flex-end', alignItems: 'center', marginTop: 8, paddingTop: 16, borderTop: '1px solid var(--border-color)' },
   inputGroup: { position: 'relative', display: 'flex', alignItems: 'center' },
   inputIcon: { position: 'absolute', right: 12, background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center' },
   toast: (type) => ({
@@ -113,49 +110,83 @@ function Toggle({ checked, onChange, label, description }) {
 }
 
 export default function EmployeeSettings() {
-  const { settings, updatePreferences, updateSecurity, changePassword, saving } = useSettings();
+  const {
+    userPreferences, userProfile, updateUserPreferences, updateUserProfile,
+    changePassword, saving, fetchUserPreferences, fetchUserProfile,
+  } = useSettings();
   const { user, updateUser } = useAuth();
 
   const [toast, setToast] = useState(null);
 
-  const [localPrefs, setLocalPrefs] = useState(settings.preferences);
-  const [localSec, setLocalSec] = useState(settings.security);
+  const [localPrefs, setLocalPrefs] = useState(userPreferences);
   const [passwords, setPasswords] = useState({ current: '', newPass: '', confirm: '' });
   const [showPw, setShowPw] = useState({ current: false, newPass: false, confirm: false });
 
   const [profile, setProfile] = useState({
-    phone: user?.phone || '',
-    address: user?.address || '',
-    profilePicture: user?.profilePicture || '',
+    phone: '',
+    address: '',
+    profileImage: '',
   });
   const [savingProfile, setSavingProfile] = useState(false);
   const fileInputRef = useRef(null);
 
   useEffect(() => {
-    setLocalPrefs(settings.preferences);
-  }, [settings.preferences]);
+    if (userProfile) {
+      setProfile({
+        phone: userProfile.phone || '',
+        address: userProfile.address || '',
+        profileImage: userProfile.profileImage || '',
+      });
+    } else if (user) {
+      setProfile({
+        phone: user.phone || '',
+        address: user.address || '',
+        profileImage: user.profileImage || '',
+      });
+    }
+  }, [userProfile, user]);
 
   useEffect(() => {
-    setLocalSec(settings.security);
-  }, [settings.security]);
-
-  useEffect(() => {
-    setProfile({
-      phone: user?.phone || '',
-      address: user?.address || '',
-      profilePicture: user?.profilePicture || '',
-    });
-  }, [user]);
+    setLocalPrefs(userPreferences);
+  }, [userPreferences]);
 
   const showToast = useCallback((msg, type = 'success') => {
     setToast({ message: msg, type });
     setTimeout(() => setToast(null), 3000);
   }, []);
 
+  const handleSaveProfile = async () => {
+    try {
+      setSavingProfile(true);
+      const result = await updateUserProfile({
+        phone: profile.phone,
+        address: profile.address,
+        profileImage: profile.profileImage,
+      });
+      if (result.success) {
+        updateUser({
+          phone: profile.phone,
+          address: profile.address,
+          profileImage: profile.profileImage,
+        });
+        showToast('Profile updated successfully!');
+      } else {
+        showToast(result.message || 'Failed to update profile', 'error');
+      }
+    } catch (error) {
+      showToast(error.message || 'Failed to update profile', 'error');
+    } finally {
+      setSavingProfile(false);
+    }
+  };
+
   const handleSavePreferences = async () => {
-    const res = await updatePreferences(localPrefs);
-    if (res.success) showToast('Preferences saved!');
-    else showToast(res.message, 'error');
+    const result = await updateUserPreferences(localPrefs);
+    if (result.success) {
+      showToast('Settings saved!');
+    } else {
+      showToast(result.message, 'error');
+    }
   };
 
   const handlePasswordChange = async () => {
@@ -171,12 +202,12 @@ export default function EmployeeSettings() {
       showToast('Password must be at least 8 characters', 'error');
       return;
     }
-    const res = await changePassword(passwords.current, passwords.newPass);
-    if (res.success) {
+    const result = await changePassword(passwords.current, passwords.newPass);
+    if (result.success) {
       setPasswords({ current: '', newPass: '', confirm: '' });
       showToast('Password changed successfully!');
     } else {
-      showToast(res.message, 'error');
+      showToast(result.message, 'error');
     }
   };
 
@@ -193,31 +224,10 @@ export default function EmployeeSettings() {
     }
     const reader = new FileReader();
     reader.onload = (event) => {
-      setProfile(prev => ({ ...prev, profilePicture: event.target.result }));
+      setProfile(prev => ({ ...prev, profileImage: event.target.result }));
     };
     reader.readAsDataURL(file);
     e.target.value = '';
-  };
-
-  const handleSaveProfile = async () => {
-    try {
-      setSavingProfile(true);
-      const { data } = await API.put(`/employees/${user.id}`, {
-        phone: profile.phone,
-        address: profile.address,
-        profilePicture: profile.profilePicture,
-      });
-      if (data.success) {
-        updateUser({ phone: profile.phone, address: profile.address, profilePicture: profile.profilePicture });
-        showToast('Profile updated successfully!');
-      } else {
-        showToast(data.message || 'Failed to update profile', 'error');
-      }
-    } catch (error) {
-      showToast(error.response?.data?.message || 'Failed to update profile', 'error');
-    } finally {
-      setSavingProfile(false);
-    }
   };
 
   const getInitials = () => {
@@ -247,8 +257,8 @@ export default function EmployeeSettings() {
         <h3 style={styles.sectionTitle}><User size={18} /> Profile</h3>
         <div style={styles.profileHeader}>
           <div style={styles.avatar} onClick={() => fileInputRef.current?.click()}>
-            {profile.profilePicture ? (
-              <img src={profile.profilePicture} alt="Profile" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            {profile.profileImage ? (
+              <img src={profile.profileImage} alt="Profile" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
             ) : (
               getInitials()
             )}
@@ -379,30 +389,6 @@ export default function EmployeeSettings() {
         <button className="btn btn-secondary" onClick={handlePasswordChange} disabled={saving}>
           <Lock size={15} /> {saving ? 'Updating...' : 'Update Password'}
         </button>
-
-        <div style={styles.divider} />
-
-        <Toggle label="Two-Factor Authentication" description="Add an extra layer of security to your account" checked={localSec.twoFactorEnabled} onChange={v => setLocalSec(p => ({ ...p, twoFactorEnabled: v }))} />
-
-        <div style={{ ...styles.toggleRow, gap: 16 }}>
-          <div style={styles.toggleInfo}>
-            <span style={styles.toggleLabel}>Session Timeout</span>
-            <span style={styles.toggleDesc}>Auto-logout after inactivity</span>
-          </div>
-          <select style={{ ...styles.select, width: 'auto', minWidth: 100 }} value={localSec.sessionTimeout} onChange={e => setLocalSec(p => ({ ...p, sessionTimeout: parseInt(e.target.value) }))}>
-            {SESSION_TIMEOUTS.map(t => <option key={t} value={t}>{t} min</option>)}
-          </select>
-        </div>
-
-        <div style={{ ...styles.toggleRow, borderBottom: 'none' }}>
-          <div style={styles.toggleInfo}>
-            <span style={styles.toggleLabel}>Login Alerts</span>
-            <span style={styles.toggleDesc}>Get notified when someone logs into your account</span>
-          </div>
-          <button type="button" style={styles.toggleTrack(localSec.loginAlerts)} onClick={() => setLocalSec(p => ({ ...p, loginAlerts: !p.loginAlerts }))} role="switch" aria-checked={localSec.loginAlerts}>
-            <span style={styles.toggleKnob(localSec.loginAlerts)} />
-          </button>
-        </div>
       </div>
 
       {/* Action Buttons */}

@@ -1,5 +1,4 @@
 const express = require("express");
-const protect = require("../middleware/authMiddleware");
 const router = express.Router();
 
 const {
@@ -12,14 +11,16 @@ const {
   deleteLeave,
 } = require("../controllers/leaveController");
 
+const { protect, adminOnly } = require("../middleware/authMiddleware");
+
 router.use(protect);
 
 router.post("/", applyLeave);
 router.get("/", getLeaves);
 router.get("/employee/:employeeId", getLeavesByEmployee);
-router.put("/approve/:id", approveLeave);
-router.put("/reject/:id", rejectLeave);
+router.put("/approve/:id", adminOnly, approveLeave);
+router.put("/reject/:id", adminOnly, rejectLeave);
 router.put("/cancel/:id", cancelLeave);
-router.delete("/:id", deleteLeave);
+router.delete("/:id", adminOnly, deleteLeave);
 
 module.exports = router;

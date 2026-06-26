@@ -25,6 +25,7 @@ function getCategoryFromType(type) {
   if (type.includes('Attendance')) return 'Attendance';
   if (type.includes('Employee')) return 'Employee';
   if (type.includes('Profile')) return 'Profile';
+  if (type.includes('Password')) return 'System';
   return 'System';
 }
 
@@ -39,8 +40,12 @@ export function NotificationsProvider({ children }) {
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(false);
   const pollingRef = useRef(null);
+  const activeRoleRef = useRef(null);
+  const activeEmpIdRef = useRef(null);
 
   const fetchNotifications = useCallback(async (recipientRole, recipientId) => {
+    const token = localStorage.getItem("dayflow-token");
+    if (!token) return;
     setLoading(true);
     try {
       const params = {};
@@ -52,20 +57,18 @@ export function NotificationsProvider({ children }) {
         const fetched = res.data.notifications.map(mapNotification);
 
         setNotifications(prev => {
-          const kept = prev.filter(n => {
-            if (recipientRole === 'Admin' && !recipientId) {
+          const otherRole = prev.filter(n => {
+            if (recipientRole === 'Admin') {
               return n.recipientRole !== 'Admin';
             }
-            if (recipientRole === 'Employee' && recipientId) {
+            if (recipientRole === 'Employee') {
               if (n.recipientRole === 'Admin') return true;
               if (n.recipientRole === 'Employee' && n.targetEmployeeId !== recipientId) return true;
               return false;
             }
-            return false;
+            return true;
           });
-          const keptIds = new Set(kept.map(n => n.id));
-          const newItems = fetched.filter(n => !keptIds.has(n.id));
-          return [...kept, ...newItems];
+          return [...otherRole, ...fetched];
         });
       }
     } catch (error) {
@@ -76,16 +79,20 @@ export function NotificationsProvider({ children }) {
   }, []);
 
   const fetchAdminNotifications = useCallback(() => {
+    activeRoleRef.current = 'Admin';
+    activeEmpIdRef.current = null;
     return fetchNotifications('Admin', undefined);
   }, [fetchNotifications]);
 
   const fetchEmployeeNotifications = useCallback((employeeId) => {
+    activeRoleRef.current = 'Employee';
+    activeEmpIdRef.current = employeeId;
     return fetchNotifications('Employee', employeeId);
   }, [fetchNotifications]);
 
   const markAsRead = useCallback(async (id) => {
     try {
-      await API.put(`/notifications/${id}`);
+      await API.put(`/notifications/${id}/read`);
       setNotifications(prev =>
         prev.map(n => n.id === id ? { ...n, read: true } : n)
       );
@@ -96,6 +103,7 @@ export function NotificationsProvider({ children }) {
 
   const markAsUnread = useCallback(async (id) => {
     try {
+      await API.put(`/notifications/${id}/unread`);
       setNotifications(prev =>
         prev.map(n => n.id === id ? { ...n, read: false } : n)
       );
@@ -205,16 +213,36 @@ export function NotificationsProvider({ children }) {
     [notifications]
   );
 
+  const getUnreadCountForAdmin = useCallback(
+    () => notifications.filter(n => !n.read && (n.targetEmployeeId === null || n.targetEmployeeId === undefined)).length,
+    [notifications]
+  );
+
   const highPriorityCount = useMemo(
     () => notifications.filter(n => n.priority === 'High' && !n.read).length,
     [notifications]
   );
 
   useEffect(() => {
-    pollingRef.current = setInterval(() => {
-      fetchNotifications('Admin', undefined);
-      fetchNotifications('Employee', undefined);
-    }, 30000);
+    const token = localStorage.getItem("dayflow-token");
+    if (!token) return;
+
+    const poll = () => {
+      const currentToken = localStorage.getItem("dayflow-token");
+      if (!currentToken) {
+        if (pollingRef.current) clearInterval(pollingRef.current);
+        return;
+      }
+      const role = activeRoleRef.current;
+      const empId = activeEmpIdRef.current;
+      if (role === 'Admin') {
+        fetchNotifications('Admin', undefined);
+      } else if (role === 'Employee' && empId) {
+        fetchNotifications('Employee', empId);
+      }
+    };
+
+    pollingRef.current = setInterval(poll, 30000);
     return () => {
       if (pollingRef.current) clearInterval(pollingRef.current);
     };
@@ -238,6 +266,7 @@ export function NotificationsProvider({ children }) {
     getEmployeeNotifications,
     getAdminNotifications,
     getUnreadCountForEmployee,
+    getUnreadCountForAdmin,
   }), [
     notifications,
     loading,
@@ -256,6 +285,7 @@ export function NotificationsProvider({ children }) {
     getEmployeeNotifications,
     getAdminNotifications,
     getUnreadCountForEmployee,
+    getUnreadCountForAdmin,
   ]);
 
   return (

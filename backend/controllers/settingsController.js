@@ -1,4 +1,5 @@
 const Settings = require("../models/Settings");
+const { notifyAdmin, notifyEmployee } = require("../services/notificationService");
 
 const DEFAULTS = {
   company: {
@@ -139,6 +140,23 @@ exports.changePassword = async (req, res) => {
     user.password = hashedPassword;
     await user.save();
 
+    const Employee = require("../models/Employee");
+    const emp = await Employee.findOne({ employeeId: user.employeeId });
+    const empCode = emp?.employeeId || user.employeeId || "";
+
+    await notifyEmployee({
+      title: "Password Reset",
+      message: `Your password has been changed successfully.`,
+      type: "Password Reset",
+      employeeId: empCode,
+    });
+
+    await notifyAdmin({
+      title: "Password Reset",
+      message: `${user.fullName} (${empCode}) has changed their password.`,
+      type: "Password Reset",
+    });
+
     res.status(200).json({ success: true, message: "Password changed successfully" });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -153,8 +171,9 @@ exports.backupData = async (req, res) => {
     const Payroll = require("../models/Payroll");
     const Notification = require("../models/Notification");
     const DemoRequest = require("../models/DemoRequest");
+    const UserPreference = require("../models/UserPreference");
 
-    const [employees, attendance, leaves, payrolls, notifications, demoRequests, settings] =
+    const [employees, attendance, leaves, payrolls, notifications, demoRequests, settings, userPreferences] =
       await Promise.all([
         Employee.find(),
         Attendance.find(),
@@ -163,12 +182,13 @@ exports.backupData = async (req, res) => {
         Notification.find(),
         DemoRequest.find(),
         Settings.find(),
+        UserPreference.find(),
       ]);
 
     const backup = {
       version: "1.0",
       createdAt: new Date().toISOString(),
-      data: { employees, attendance, leaves, payrolls, notifications, demoRequests, settings },
+      data: { employees, attendance, leaves, payrolls, notifications, demoRequests, settings, userPreferences },
     };
 
     res.status(200).json({ success: true, backup });
@@ -192,16 +212,18 @@ exports.restoreData = async (req, res) => {
     const Notification = require("../models/Notification");
     const DemoRequest = require("../models/DemoRequest");
     const Settings = require("../models/Settings");
+    const UserPreference = require("../models/UserPreference");
 
     const d = backup.data;
 
-    if (d.employees) await Employee.deleteMany({}); await Employee.insertMany(d.employees || []);
-    if (d.attendance) await Attendance.deleteMany({}); await Attendance.insertMany(d.attendance || []);
-    if (d.leaves) await Leave.deleteMany({}); await Leave.insertMany(d.leaves || []);
-    if (d.payrolls) await Payroll.deleteMany({}); await Payroll.insertMany(d.payrolls || []);
-    if (d.notifications) await Notification.deleteMany({}); await Notification.insertMany(d.notifications || []);
-    if (d.demoRequests) await DemoRequest.deleteMany({}); await DemoRequest.insertMany(d.demoRequests || []);
-    if (d.settings) await Settings.deleteMany({}); await Settings.insertMany(d.settings || []);
+    if (d.employees) { await Employee.deleteMany({}); await Employee.insertMany(d.employees || []); }
+    if (d.attendance) { await Attendance.deleteMany({}); await Attendance.insertMany(d.attendance || []); }
+    if (d.leaves) { await Leave.deleteMany({}); await Leave.insertMany(d.leaves || []); }
+    if (d.payrolls) { await Payroll.deleteMany({}); await Payroll.insertMany(d.payrolls || []); }
+    if (d.notifications) { await Notification.deleteMany({}); await Notification.insertMany(d.notifications || []); }
+    if (d.demoRequests) { await DemoRequest.deleteMany({}); await DemoRequest.insertMany(d.demoRequests || []); }
+    if (d.settings) { await Settings.deleteMany({}); await Settings.insertMany(d.settings || []); }
+    if (d.userPreferences) { await UserPreference.deleteMany({}); await UserPreference.insertMany(d.userPreferences || []); }
 
     res.status(200).json({ success: true, message: "Data restored successfully" });
   } catch (error) {
@@ -227,6 +249,7 @@ exports.resetData = async (req, res) => {
     const Notification = require("../models/Notification");
     const DemoRequest = require("../models/DemoRequest");
     const Settings = require("../models/Settings");
+    const UserPreference = require("../models/UserPreference");
 
     await Promise.all([
       Employee.deleteMany({}),
@@ -236,6 +259,7 @@ exports.resetData = async (req, res) => {
       Notification.deleteMany({}),
       DemoRequest.deleteMany({}),
       Settings.deleteMany({}),
+      UserPreference.deleteMany({}),
     ]);
 
     res.status(200).json({ success: true, message: "All data has been reset" });

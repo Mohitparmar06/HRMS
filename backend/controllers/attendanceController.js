@@ -1,6 +1,6 @@
 const Attendance = require("../models/Attendance");
 const Employee = require("../models/Employee");
-const Notification = require("../models/Notification");
+const { notifyAdmin, notifyEmployee } = require("../services/notificationService");
 
 exports.checkIn = async (req, res) => {
   try {
@@ -20,22 +20,17 @@ exports.checkIn = async (req, res) => {
     const empCode = emp?.employeeId || "";
     const time = new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false });
 
-    await Notification.create({
+    await notifyAdmin({
       title: "Attendance Check-In",
       message: `${empName} (${empCode}) checked in at ${time}.`,
       type: "Attendance Check-In",
-      recipientRole: "Admin",
-      recipientId: null,
-      isRead: false,
     });
 
-    await Notification.create({
+    await notifyEmployee({
       title: "Attendance Checked In",
       message: `You have successfully checked in at ${time}. Have a productive day!`,
       type: "Attendance Check-In",
-      recipientRole: "Employee",
-      recipientId: empCode || null,
-      isRead: false,
+      employeeId: empCode,
     });
 
     res.status(201).json({ success: true, attendance });
@@ -61,22 +56,17 @@ exports.checkOut = async (req, res) => {
     const empCode = emp?.employeeId || "";
     const time = new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false });
 
-    await Notification.create({
+    await notifyAdmin({
       title: "Attendance Check-Out",
       message: `${empName} (${empCode}) checked out at ${time}.`,
       type: "Attendance Check-Out",
-      recipientRole: "Admin",
-      recipientId: null,
-      isRead: false,
     });
 
-    await Notification.create({
+    await notifyEmployee({
       title: "Attendance Checked Out",
       message: `You have successfully checked out at ${time}. Great work today!`,
       type: "Attendance Check-Out",
-      recipientRole: "Employee",
-      recipientId: empCode || null,
-      isRead: false,
+      employeeId: empCode,
     });
 
     res.status(200).json({ success: true, attendance });

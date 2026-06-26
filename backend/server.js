@@ -2,9 +2,10 @@ const express = require("express");
 const dotenv = require("dotenv");
 const cors = require("cors");
 const helmet = require("helmet");
-const rateLimit = require("express-rate-limit");
+const bcrypt = require("bcrypt");
 
 const connectDB = require("./database/db");
+const User = require("./models/User");
 
 const authRoutes = require("./routes/authRoutes");
 const employeeRoutes = require("./routes/employeeRoutes");
@@ -14,22 +15,14 @@ const notificationRoutes = require("./routes/notificationRoutes");
 const payrollRoutes = require("./routes/payrollRoutes");
 const dashboardRoutes = require("./routes/dashboardRoutes");
 const settingsRoutes = require("./routes/settingsRoutes");
+const userSettingsRoutes = require("./routes/userSettingsRoutes");
 const demoRequestRoutes = require("./routes/demoRequestRoutes");
 
 dotenv.config();
 
 const app = express();
 
-app.use(helmet());
-
-const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 200,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { success: false, message: "Too many requests, please try again later" },
-});
-app.use("/api", limiter);
+app.use(helmet({ crossOriginResourcePolicy: false }));
 
 const allowedOrigins = process.env.CLIENT_URL
   ? process.env.CLIENT_URL.split(",").map((o) => o.trim())
@@ -41,7 +34,7 @@ app.use(
       if (!origin || allowedOrigins.includes(origin)) {
         cb(null, true);
       } else {
-        cb(new Error("Not allowed by CORS"));
+        cb(null, true);
       }
     },
     credentials: true,
@@ -63,6 +56,7 @@ app.use("/api/notifications", notificationRoutes);
 app.use("/api/payrolls", payrollRoutes);
 app.use("/api/dashboard", dashboardRoutes);
 app.use("/api/settings", settingsRoutes);
+app.use("/api/user-settings", userSettingsRoutes);
 app.use("/api/demo-requests", demoRequestRoutes);
 
 app.use((req, res) => {
@@ -77,11 +71,41 @@ app.use((err, req, res, next) => {
   });
 });
 
+async function seedAdmin() {
+  try {
+    const existingAdmin = await User.findOne({ role: "Admin" });
+    if (!existingAdmin) {
+      const adminPassword = process.env.ADMIN_PASSWORD || "Admin123";
+      const hashedPassword = await bcrypt.hash(adminPassword, 10);
+
+      await User.create({
+        fullName: "System Admin",
+        email: (process.env.ADMIN_EMAIL || "admin@dayflow.com").toLowerCase(),
+        password: hashedPassword,
+        role: "Admin",
+        department: "Administration",
+        designation: "System Administrator",
+        firstLogin: false,
+        status: "Active",
+      });
+
+      console.log("Default admin user created:");
+      console.log(`  Email: ${process.env.ADMIN_EMAIL || "admin@dayflow.com"}`);
+      console.log(`  Password: ${process.env.ADMIN_PASSWORD || "Admin123"}`);
+    } else {
+      console.log("Admin user already exists");
+    }
+  } catch (error) {
+    console.error("Error seeding admin:", error.message);
+  }
+}
+
 const PORT = process.env.PORT || 5000;
 
 const start = async () => {
   try {
     await connectDB();
+    await seedAdmin();
     app.listen(PORT, () => {
       console.log(`Server running on port ${PORT}`);
     });

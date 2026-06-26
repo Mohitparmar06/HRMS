@@ -4,7 +4,7 @@ import { useNotifications } from '../contexts/NotificationsContext';
 import {
   Bell, BellRing, BellOff, Trash2,
   Clock, Wallet, Calendar, CheckCircle, AlertTriangle, ChevronDown,
-  UserCheck, Megaphone,
+  UserCheck, Megaphone, Search, X,
 } from 'lucide-react';
 
 const TABS = [
@@ -58,26 +58,35 @@ export default function EmployeeNotifications() {
   } = useNotifications();
 
   useEffect(() => {
-    if (user?.id) {
-      fetchEmployeeNotifications(user.id);
+    if (user?.employeeId) {
+      fetchEmployeeNotifications(user.employeeId);
     }
-  }, [user?.id, fetchEmployeeNotifications]);
+  }, [user?.employeeId, fetchEmployeeNotifications]);
 
   const [activeTab, setActiveTab] = useState('all');
   const [expandedId, setExpandedId] = useState(null);
+  const [searchQuery, setSearchQuery] = useState('');
 
-  const empNotifications = useMemo(() => getEmployeeNotifications(user?.id), [user?.id, getEmployeeNotifications]);
-  const empUnreadCount = useMemo(() => getUnreadCountForEmployee(user?.id), [user?.id, getUnreadCountForEmployee]);
+  const empNotifications = useMemo(() => getEmployeeNotifications(user?.employeeId), [user?.employeeId, getEmployeeNotifications]);
+  const empUnreadCount = useMemo(() => getUnreadCountForEmployee(user?.employeeId), [user?.employeeId, getUnreadCountForEmployee]);
 
   const filtered = useMemo(() => {
     let result = [...empNotifications];
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase();
+      result = result.filter(n =>
+        (n.title || '').toLowerCase().includes(q) ||
+        (n.description || '').toLowerCase().includes(q) ||
+        (n.category || '').toLowerCase().includes(q)
+      );
+    }
     if (activeTab === 'unread') result = result.filter(n => !n.read);
     else if (['Leave', 'Payroll', 'System'].includes(activeTab)) {
       result = result.filter(n => n.category === activeTab);
     }
     result.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
     return result;
-  }, [empNotifications, activeTab]);
+  }, [empNotifications, activeTab, searchQuery]);
 
   const getTabCount = (key) => {
     if (key === 'all') return empNotifications.length;
@@ -86,7 +95,7 @@ export default function EmployeeNotifications() {
   };
 
   const handleClearAll = async () => {
-    await clearAll('Employee', user?.id);
+    await clearAll('Employee', user?.employeeId);
   };
 
   return (
@@ -99,7 +108,7 @@ export default function EmployeeNotifications() {
           </h1>
           <p className="page-subtitle">Stay updated with your alerts and activities</p>
         </div>
-        <button className="btn btn-primary" onClick={() => markAllAsReadForEmployee(user?.id)}>
+        <button className="btn btn-primary" onClick={() => markAllAsReadForEmployee(user?.employeeId)}>
           <CheckCircle size={15} /> Mark All as Read
         </button>
       </div>
@@ -165,16 +174,44 @@ export default function EmployeeNotifications() {
         ))}
       </div>
 
+      <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+        <div className="notif-search">
+          <Search size={16} />
+          <input
+            type="text"
+            placeholder="Search notifications..."
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+          />
+          {searchQuery && (
+            <button className="notif-search-clear" onClick={() => setSearchQuery('')}>
+              <X size={14} />
+            </button>
+          )}
+        </div>
+        {searchQuery && (
+          <button
+            className="btn btn-outline"
+            style={{ padding: '7px 14px', fontSize: '0.78rem', display: 'flex', alignItems: 'center', gap: '4px' }}
+            onClick={() => setSearchQuery('')}
+          >
+            <X size={13} /> Clear Search
+          </button>
+        )}
+      </div>
+
       {filtered.length === 0 ? (
         <div className="glass-card" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '60px 20px', gap: '12px' }}>
           <BellOff size={48} style={{ color: 'var(--text-dim)' }} />
           <h3 style={{ color: 'white', fontSize: '1.1rem', fontWeight: 600 }}>No notifications found</h3>
           <p style={{ color: 'var(--text-dim)', fontSize: '0.85rem', textAlign: 'center' }}>
-            {activeTab === 'unread'
-              ? "You're all caught up! No unread notifications."
-              : activeTab !== 'all'
-                ? `No ${activeTab.toLowerCase()} notifications yet.`
-                : 'No notifications to display.'}
+            {searchQuery
+              ? `No notifications matching "${searchQuery}"`
+              : activeTab === 'unread'
+                ? "You're all caught up! No unread notifications."
+                : activeTab !== 'all'
+                  ? `No ${activeTab.toLowerCase()} notifications yet.`
+                  : 'No notifications to display.'}
           </p>
         </div>
       ) : (

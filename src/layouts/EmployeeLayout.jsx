@@ -26,13 +26,13 @@ function EmployeeNavbar() {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
   const { getUnreadCountForEmployee, fetchEmployeeNotifications } = useNotifications();
-  const unreadCount = getUnreadCountForEmployee(user?.id);
+  const unreadCount = getUnreadCountForEmployee(user?.employeeId);
 
   useEffect(() => {
-    if (user?.id) {
-      fetchEmployeeNotifications(user.id);
+    if (user?.employeeId) {
+      fetchEmployeeNotifications(user.employeeId);
     }
-  }, [user?.id, fetchEmployeeNotifications]);
+  }, [user?.employeeId, fetchEmployeeNotifications]);
 
   const initials = useMemo(() => {
     if (!user) return 'U';

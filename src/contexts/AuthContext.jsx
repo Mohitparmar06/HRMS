@@ -41,10 +41,12 @@ export function AuthProvider({ children }) {
           department: data.user.department,
           designation: data.user.designation,
           phone: data.user.phone,
+          address: data.user.address || '',
           profileImage: data.user.profileImage,
           joinDate: data.user.joiningDate,
           status: data.user.status,
           employeeId: data.user.employeeId,
+          firstLogin: data.user.firstLogin,
         };
         setUser(authUser);
         return authUser;
@@ -67,14 +69,70 @@ export function AuthProvider({ children }) {
     setUser(prev => prev ? { ...prev, ...updates } : prev);
   }, []);
 
+  const changePassword = useCallback(async (currentPassword, newPassword) => {
+    try {
+      const { data } = await API.post('/auth/change-password', { currentPassword, newPassword });
+      if (data.success) {
+        setUser(prev => prev ? { ...prev, firstLogin: false } : prev);
+        return data;
+      }
+      throw new Error(data.message || 'Password change failed');
+    } catch (err) {
+      throw new Error(err.response?.data?.message || err.message || 'Password change failed');
+    }
+  }, []);
+
+  const forceChangePassword = useCallback(async (newPassword) => {
+    try {
+      const { data } = await API.post('/auth/force-change-password', { newPassword });
+      if (data.success) {
+        setUser(prev => prev ? { ...prev, firstLogin: false } : prev);
+        return data;
+      }
+      throw new Error(data.message || 'Password change failed');
+    } catch (err) {
+      throw new Error(err.response?.data?.message || err.message || 'Password change failed');
+    }
+  }, []);
+
+  const adminResetPassword = useCallback(async (employeeId, newPassword) => {
+    try {
+      const { data } = await API.post('/auth/admin/reset-password', { employeeId, newPassword });
+      if (data.success) return data;
+      throw new Error(data.message || 'Password reset failed');
+    } catch (err) {
+      throw new Error(err.response?.data?.message || err.message || 'Password reset failed');
+    }
+  }, []);
+
+  const adminRegenerateTempPassword = useCallback(async (employeeId) => {
+    try {
+      const { data } = await API.post('/auth/admin/temp-password', { employeeId });
+      if (data.success) return data;
+      throw new Error(data.message || 'Password regeneration failed');
+    } catch (err) {
+      throw new Error(err.response?.data?.message || err.message || 'Password regeneration failed');
+    }
+  }, []);
+
+  const isAdmin = user?.role === 'Admin';
+  const isEmployee = user?.role === 'Employee';
+
   const value = useMemo(() => ({
     user,
     login,
     logout,
     updateUser,
+    changePassword,
+    forceChangePassword,
+    adminResetPassword,
+    adminRegenerateTempPassword,
     loading,
     isAuthenticated: !!user,
-  }), [user, login, logout, updateUser, loading]);
+    isAdmin,
+    isEmployee,
+    isFirstLogin: !!user?.firstLogin,
+  }), [user, login, logout, updateUser, changePassword, forceChangePassword, adminResetPassword, adminRegenerateTempPassword, loading, isAdmin, isEmployee]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

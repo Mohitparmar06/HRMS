@@ -1,5 +1,5 @@
 const Leave = require("../models/Leave");
-const Notification = require("../models/Notification");
+const { notifyAdmin, notifyEmployee } = require("../services/notificationService");
 
 function toLocalDateStr(d) {
   if (!d) return null;
@@ -51,13 +51,10 @@ exports.applyLeave = async (req, res) => {
     const populated = await Leave.findById(leave._id).populate('employeeId');
     const emp = populated.employeeId;
 
-    await Notification.create({
+    await notifyAdmin({
       title: "Leave Applied",
       message: `${emp?.fullName || 'Employee'} (${emp?.employeeId || ''}) has applied for ${populated.leaveType} from ${toLocalDateStr(populated.startDate)} to ${toLocalDateStr(populated.endDate)} (${populated.duration} days).`,
       type: "Leave Applied",
-      recipientRole: "Admin",
-      recipientId: null,
-      isRead: false,
     });
 
     res.status(201).json({ success: true, leave: transformRecord(populated) });
@@ -106,13 +103,11 @@ exports.approveLeave = async (req, res) => {
 
     const emp = leave.employeeId;
 
-    await Notification.create({
+    await notifyEmployee({
       title: "Leave Approved",
       message: `Your ${leave.leaveType} request for ${toLocalDateStr(leave.startDate)} to ${toLocalDateStr(leave.endDate)} (${leave.duration} days) has been approved.`,
       type: "Leave Approved",
-      recipientRole: "Employee",
-      recipientId: emp?.employeeId || null,
-      isRead: false,
+      employeeId: emp?.employeeId || null,
     });
 
     res.status(200).json({ success: true, leave: transformRecord(leave) });
@@ -140,13 +135,11 @@ exports.rejectLeave = async (req, res) => {
 
     const emp = leave.employeeId;
 
-    await Notification.create({
+    await notifyEmployee({
       title: "Leave Rejected",
       message: `Your ${leave.leaveType} request for ${toLocalDateStr(leave.startDate)} to ${toLocalDateStr(leave.endDate)} has been rejected. ${leave.rejectionReason ? 'Reason: ' + leave.rejectionReason : ''}`,
       type: "Leave Rejected",
-      recipientRole: "Employee",
-      recipientId: emp?.employeeId || null,
-      isRead: false,
+      employeeId: emp?.employeeId || null,
     });
 
     res.status(200).json({ success: true, leave: transformRecord(leave) });

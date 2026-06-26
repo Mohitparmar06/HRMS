@@ -1,5 +1,4 @@
 const express = require("express");
-const protect = require("../middleware/authMiddleware");
 const router = express.Router();
 
 const {
@@ -11,6 +10,8 @@ const {
   getStats,
 } = require("../controllers/demoRequestController");
 
+const { protect, adminOnly } = require("../middleware/authMiddleware");
+
 router.post("/", createRequest);
 
 router.use(protect);
@@ -18,7 +19,7 @@ router.use(protect);
 router.get("/", getRequests);
 router.get("/stats", getStats);
 router.get("/:id", getRequestById);
-router.put("/:id", updateStatus);
-router.delete("/:id", deleteRequest);
+router.put("/:id", adminOnly, updateStatus);
+router.delete("/:id", adminOnly, deleteRequest);
 
 module.exports = router;

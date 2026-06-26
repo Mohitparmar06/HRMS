@@ -53,9 +53,19 @@ const userSchema = new mongoose.Schema(
       default: "",
     },
 
+    address: {
+      type: String,
+      default: "",
+    },
+
     joiningDate: {
       type: Date,
       default: Date.now,
+    },
+
+    firstLogin: {
+      type: Boolean,
+      default: true,
     },
 
     status: {

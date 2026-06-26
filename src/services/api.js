@@ -17,9 +17,19 @@ API.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
+      const token = localStorage.getItem("dayflow-token");
+      const currentPath = window.location.pathname;
+
+      if (!token && currentPath === "/login") {
+        return Promise.reject(error);
+      }
+
       localStorage.removeItem("dayflow-token");
       localStorage.removeItem("dayflow-auth");
-      window.location.href = "/login";
+
+      if (currentPath !== "/login" && currentPath !== "/") {
+        window.location.href = "/login";
+      }
     }
     return Promise.reject(error);
   }

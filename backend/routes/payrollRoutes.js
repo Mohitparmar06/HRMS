@@ -1,5 +1,4 @@
 const express = require("express");
-const protect = require("../middleware/authMiddleware");
 const router = express.Router();
 
 const {
@@ -11,13 +10,15 @@ const {
   deletePayroll,
 } = require("../controllers/payrollController");
 
+const { protect, adminOnly } = require("../middleware/authMiddleware");
+
 router.use(protect);
 
-router.post("/", createPayroll);
+router.post("/", adminOnly, createPayroll);
 router.get("/", getPayrolls);
 router.get("/employee/:employeeId", getPayrollsByEmployee);
 router.get("/:id", getPayrollById);
-router.put("/:id", updatePayroll);
-router.delete("/:id", deletePayroll);
+router.put("/:id", adminOnly, updatePayroll);
+router.delete("/:id", adminOnly, deletePayroll);
 
 module.exports = router;

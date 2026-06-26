@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Save, Upload, User } from 'lucide-react';
+import { ArrowLeft, Save, Upload, User, CheckCircle, Copy } from 'lucide-react';
 import { useEmployees } from '../../contexts/EmployeeContext';
 
 const positionsByDept = {
@@ -27,6 +27,10 @@ export default function AddEmployee() {
   const [form, setForm] = useState(initialForm);
   const [errors, setErrors] = useState({});
   const [profilePreview, setProfilePreview] = useState(null);
+  const [createdCredentials, setCreatedCredentials] = useState(null);
+  const [copiedEmail, setCopiedEmail] = useState(false);
+  const [copiedPassword, setCopiedPassword] = useState(false);
+  const [copiedAll, setCopiedAll] = useState(false);
 
   const nextId = getNextId();
 
@@ -61,38 +65,50 @@ export default function AddEmployee() {
     return Object.keys(errs).length === 0;
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     if (!validate()) return;
 
     const name = `${form.firstName} ${form.lastName}`;
-    addEmployee({
-      id: nextId,
-      firstName: form.firstName,
-      lastName: form.lastName,
-      name,
-      email: form.email,
-      phone: form.phone,
-      avatar: `${form.firstName[0]}${form.lastName[0]}`.toUpperCase(),
-      department: form.department,
-      departmentId: departments.find(d => d.name === form.department)?.id || '',
-      position: form.position,
-      status: form.status,
-      salary: parseInt(form.salary, 10),
-      joinDate: form.joinDate,
-      lastCheckIn: null,
-      performance: 75,
-      projectsCompleted: 0,
-      hoursWorked: 0,
-      gender: form.gender,
-      dob: form.dob,
-      address: form.address,
-      emergencyName: form.emergencyName,
-      emergencyContact: form.emergencyContact,
-      profilePicture: profilePreview,
-    });
+    try {
+      const result = await addEmployee({
+        id: nextId,
+        firstName: form.firstName,
+        lastName: form.lastName,
+        name,
+        email: form.email,
+        phone: form.phone,
+        avatar: `${form.firstName[0]}${form.lastName[0]}`.toUpperCase(),
+        department: form.department,
+        departmentId: departments.find(d => d.name === form.department)?.id || '',
+        position: form.position,
+        status: form.status,
+        salary: parseInt(form.salary, 10),
+        joinDate: form.joinDate,
+        lastCheckIn: null,
+        performance: 75,
+        projectsCompleted: 0,
+        hoursWorked: 0,
+        gender: form.gender,
+        dob: form.dob,
+        address: form.address,
+        emergencyName: form.emergencyName,
+        emergencyContact: form.emergencyContact,
+        profilePicture: profilePreview,
+      });
 
-    navigate('/admin/employees');
+      if (result?.userAccount) {
+        setCreatedCredentials({
+          name,
+          email: result.userAccount.email,
+          tempPassword: result.userAccount.tempPassword,
+        });
+      } else {
+        navigate('/admin/employees');
+      }
+    } catch (err) {
+      setErrors({ submit: err.message || 'Failed to create employee' });
+    }
   };
 
   const availablePositions = form.department ? (positionsByDept[form.department] || []) : [];
@@ -240,6 +256,72 @@ export default function AddEmployee() {
           <button type="submit" className="btn btn-primary"><Save size={16} /> Add Employee</button>
         </div>
       </form>
+
+      {createdCredentials && (
+        <div className="emp-modal-overlay" onClick={() => {}}>
+          <div className="emp-modal" onClick={e => e.stopPropagation()} style={{ padding: '32px', maxWidth: '480px' }}>
+            <div style={{ textAlign: 'center', marginBottom: '24px' }}>
+              <div style={{ width: '64px', height: '64px', borderRadius: '50%', backgroundColor: 'rgba(34, 197, 94, 0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
+                <CheckCircle size={32} color="#22c55e" />
+              </div>
+              <h3>Employee Created Successfully</h3>
+              <p style={{ color: 'var(--text-dim)', marginTop: '8px' }}>
+                Login credentials generated for <strong>{createdCredentials.name}</strong>
+              </p>
+            </div>
+
+            <div style={{ background: 'var(--bg-secondary)', padding: '20px', borderRadius: '12px', marginBottom: '20px' }}>
+              <div style={{ marginBottom: '14px' }}>
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)', display: 'block', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Employee Name</span>
+                <span style={{ fontSize: '0.95rem', fontWeight: 600 }}>{createdCredentials.name}</span>
+              </div>
+              <div style={{ marginBottom: '14px' }}>
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)', display: 'block', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Email (Username)</span>
+                <span style={{ fontFamily: 'monospace', fontSize: '0.95rem', fontWeight: 600 }}>{createdCredentials.email}</span>
+              </div>
+              <div style={{ marginBottom: '14px' }}>
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)', display: 'block', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Temporary Password</span>
+                <span style={{ fontFamily: 'monospace', fontSize: '1.05rem', fontWeight: 700, letterSpacing: '1px' }}>{createdCredentials.tempPassword}</span>
+              </div>
+              <div>
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)', display: 'block', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Role</span>
+                <span style={{ fontSize: '0.95rem', fontWeight: 600 }}>{createdCredentials.role || 'Employee'}</span>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
+              <button
+                onClick={() => { navigator.clipboard.writeText(createdCredentials.email); setCopiedEmail(true); setTimeout(() => setCopiedEmail(false), 2000); }}
+                style={{ flex: 1, background: 'transparent', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '10px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', fontSize: '0.8rem', fontWeight: 500, color: 'var(--text-primary)' }}
+              >
+                <Copy size={13} /> {copiedEmail ? 'Copied!' : 'Copy Email'}
+              </button>
+              <button
+                onClick={() => { navigator.clipboard.writeText(createdCredentials.tempPassword); setCopiedPassword(true); setTimeout(() => setCopiedPassword(false), 2000); }}
+                style={{ flex: 1, background: 'transparent', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '10px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', fontSize: '0.8rem', fontWeight: 500, color: 'var(--text-primary)' }}
+              >
+                <Copy size={13} /> {copiedPassword ? 'Copied!' : 'Copy Password'}
+              </button>
+            </div>
+
+            <button
+              onClick={() => {
+                const text = `Name: ${createdCredentials.name}\nEmail: ${createdCredentials.email}\nPassword: ${createdCredentials.tempPassword}\nRole: ${createdCredentials.role || 'Employee'}`;
+                navigator.clipboard.writeText(text);
+                setCopiedAll(true);
+                setTimeout(() => setCopiedAll(false), 2000);
+              }}
+              className="btn btn-primary"
+              style={{ width: '100%', marginBottom: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
+            >
+              <Copy size={14} /> {copiedAll ? 'Copied!' : 'Copy All Credentials'}
+            </button>
+            <button className="btn btn-secondary" onClick={() => navigate('/admin/employees')} style={{ width: '100%' }}>
+              Close
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, Bell, MessageSquare, Plus, Menu, X, Clock } from 'lucide-react';
+import { Search, Bell, MessageSquare, Plus, Menu, X, Clock, LogOut } from 'lucide-react';
+import { useAuth } from '../../contexts/AuthContext';
 import { useNotifications } from '../../contexts/NotificationsContext';
 
 const CATEGORY_ICONS = {
@@ -41,8 +42,9 @@ export default function AdminNavbar({ onMobileToggle, isMobileOpen }) {
   const quickAddRef = useRef(null);
   const messagesRef = useRef(null);
   const navigate = useNavigate();
+  const { user, logout } = useAuth();
 
-  const { notifications, unreadCount, markAllAsRead, fetchAdminNotifications } = useNotifications();
+  const { notifications, markAllAsRead, fetchAdminNotifications, getUnreadCountForAdmin } = useNotifications();
 
   useEffect(() => {
     fetchAdminNotifications();
@@ -50,7 +52,7 @@ export default function AdminNavbar({ onMobileToggle, isMobileOpen }) {
 
   const adminNotifications = notifications.filter(n => n.targetEmployeeId === null || n.targetEmployeeId === undefined);
   const latestFive = adminNotifications.slice(0, 5);
-  const adminUnreadCount = adminNotifications.filter(n => !n.read).length;
+  const adminUnreadCount = getUnreadCountForAdmin();
   const unreadMessageCount = messages.filter(m => m.unread).length;
 
   const handleMarkAllRead = () => {
@@ -263,12 +265,19 @@ export default function AdminNavbar({ onMobileToggle, isMobileOpen }) {
         </div>
 
         <div className="admin-topbar-profile">
-          <div className="admin-topbar-avatar">AD</div>
+          <div className="admin-topbar-avatar">{user?.name?.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) || 'AD'}</div>
           <div className="admin-topbar-profile-info">
-            <span className="admin-topbar-name">Admin</span>
-            <span className="admin-topbar-role">HR Admin</span>
+            <span className="admin-topbar-name">{user?.name || 'Admin'}</span>
+            <span className="admin-topbar-role">{user?.designation || 'HR Admin'}</span>
           </div>
         </div>
+
+        <button
+          onClick={() => { logout(); navigate('/login'); }}
+          style={{ background: 'transparent', border: '1px solid var(--border-color)', color: '#ef4444', borderRadius: '10px', padding: '8px 14px', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px', fontFamily: 'inherit' }}
+        >
+          <LogOut size={14} /> Logout
+        </button>
       </div>
     </header>
   );

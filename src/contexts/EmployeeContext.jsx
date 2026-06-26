@@ -4,28 +4,56 @@ import React, {
   useState,
   useCallback,
   useEffect,
+  useMemo,
 } from "react";
 
 import API from "../services/api";
 
-const departments = [
-  { id: 'DEPT-001', name: 'Engineering', head: 'Sarah Chen', employeeCount: 32, budget: 2850000, color: '#3b82f6' },
-  { id: 'DEPT-002', name: 'Human Resources', head: 'Marcus Webb', employeeCount: 12, budget: 980000, color: '#a855f7' },
-  { id: 'DEPT-003', name: 'Finance', head: 'Priya Sharma', employeeCount: 15, budget: 1200000, color: '#10b981' },
-  { id: 'DEPT-004', name: 'Sales & Marketing', head: "James O'Connor", employeeCount: 22, budget: 1650000, color: '#f59e0b' },
-  { id: 'DEPT-005', name: 'Product Management', head: 'Anika Patel', employeeCount: 10, budget: 1100000, color: '#ec4899' },
-  { id: 'DEPT-006', name: 'Design', head: 'Lucas Moreau', employeeCount: 14, budget: 1050000, color: '#06b6d4' },
-  { id: 'DEPT-007', name: 'Operations', head: 'Fatima Al-Rashid', employeeCount: 18, budget: 1320000, color: '#8b5cf6' },
-  { id: 'DEPT-008', name: 'Customer Support', head: 'David Kim', employeeCount: 27, budget: 1480000, color: '#f97316' },
-];
+const DEPT_COLORS = {
+  'Engineering': '#3b82f6',
+  'Human Resources': '#a855f7',
+  'Finance': '#10b981',
+  'Sales & Marketing': '#f59e0b',
+  'Product Management': '#ec4899',
+  'Design': '#06b6d4',
+  'Operations': '#8b5cf6',
+  'Customer Support': '#f97316',
+  'Marketing': '#f97316',
+  'Sales': '#f59e0b',
+  'Administration': '#6366f1',
+  'Engineering & Product': '#3b82f6',
+  'Research': '#14b8a6',
+};
+
+const DEFAULT_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#a855f7', '#06b6d4', '#8b5cf6', '#f97316', '#ec4899', '#14b8a6'];
 
 const EmployeeContext = createContext(null);
 
 export function EmployeeProvider({ children }) {
   const [employees, setEmployees] = useState([]);
 
-  // Load Employees
+  const departments = useMemo(() => {
+    const deptMap = {};
+    for (const emp of employees) {
+      const deptName = emp.department;
+      if (!deptName) continue;
+      if (!deptMap[deptName]) {
+        const colorIndex = Object.keys(deptMap).length;
+        deptMap[deptName] = {
+          id: `DEPT-${String(colorIndex + 1).padStart(3, '0')}`,
+          name: deptName,
+          employeeCount: 0,
+          color: DEPT_COLORS[deptName] || DEFAULT_COLORS[colorIndex % DEFAULT_COLORS.length],
+        };
+      }
+      deptMap[deptName].employeeCount++;
+    }
+    return Object.values(deptMap);
+  }, [employees]);
+
   const fetchEmployees = useCallback(async () => {
+    const token = localStorage.getItem("dayflow-token");
+    if (!token) return;
     try {
       const res = await API.get("/employees");
 
@@ -95,7 +123,7 @@ export function EmployeeProvider({ children }) {
   // Add Employee
   const addEmployee = async (emp) => {
     try {
-      await API.post("/employees", {
+      const res = await API.post("/employees", {
         employeeId: emp.id,
         fullName: emp.name,
         email: emp.email,
@@ -118,8 +146,10 @@ export function EmployeeProvider({ children }) {
       });
 
       await fetchEmployees();
+
+      return res.data;
     } catch (error) {
-      console.error(error);
+      throw error;
     }
   };
 
@@ -131,10 +161,10 @@ export function EmployeeProvider({ children }) {
       if (!employee) return;
 
       await API.put(`/employees/${employee._id}`, {
-        fullName: updates.name,
+        fullName: updates.name || updates.fullName,
         email: updates.email,
         department: updates.department,
-        designation: updates.position,
+        designation: updates.position || updates.designation,
         salary: updates.salary,
         status: updates.status,
         phone: updates.phone,
